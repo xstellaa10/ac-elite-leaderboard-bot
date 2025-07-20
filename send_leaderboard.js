@@ -87,7 +87,7 @@ function buildEmbed(data) {
     const medal = medals[place] ? `${medals[place]} ` : "";
     const name = truncateName(entry.name || "Unknown");
     const time = msToMinSec(entry.laptime || 0);
-    description += `${place}. ${medal}**${name}** — \`${time}\`\n`;
+    description += `${place}. ${medal}\`${time}\` — **${name}**\n`;
   });
 
   const embed = new EmbedBuilder()
