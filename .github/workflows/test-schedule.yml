@@ -1,0 +1,12 @@
+name: Test Schedule
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # elke 15 minuten
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Run at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
