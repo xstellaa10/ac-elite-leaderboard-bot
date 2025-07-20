@@ -1,18 +1,19 @@
+import os
 import requests
 from ftplib import FTP
 import json
 from datetime import datetime, timezone
 
-# SETTINGS
-FTP_HOST         = "de2.assettohosting.com"
-FTP_USER         = "40283-elite"
-FTP_PASS         = "40283-elite"
-LEADERBOARD_FILE = "leaderboard.json"
-DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1396308607141937273/PiWXsI08RvfTqbH7OK4IUrVRjikL2gdMebhLwtJ0uhpYywvxCuPhfoj1Ga9rHrN4N0AM"
+# SETTINGS (nu uit env vars i.p.v. hard‑coded)
+FTP_HOST         = os.environ["FTP_HOST"]
+FTP_USER         = os.environ["FTP_USER"]
+FTP_PASS         = os.environ["FTP_PASS"]
+DISCORD_WEBHOOK  = os.environ["DISCORD_WEBHOOK"]
 
-TRACK = "ks_nurburgring_layout_gp_a"
-CAR   = "tatuusfa1"
-TOP_N = 10
+LEADERBOARD_FILE = "leaderboard.json"
+TRACK            = "ks_nurburgring_layout_gp_a"
+CAR              = "tatuusfa1"
+TOP_N            = 10
 
 def ms_to_min_sec(ms):
     sec = ms/1000
