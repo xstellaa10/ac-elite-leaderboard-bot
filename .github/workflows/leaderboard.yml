@@ -3,7 +3,6 @@ name: Post KMR Leaderboard
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch:
 
 jobs:
   post-leaderboard:
