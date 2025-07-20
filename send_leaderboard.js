@@ -7,9 +7,9 @@ const path = require("path");
 
 // Raw image URLs (pas eventueel aan)
 const TRACK_IMAGE_URL =
-  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/main/images/nurburgring.jpg";
+  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/nurburgring.jpg";
 const AC_LOGO_URL =
-  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/main/images/ac.jpg";
+  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/ac.jpg";
 
 const {
   FTP_HOST = "",
