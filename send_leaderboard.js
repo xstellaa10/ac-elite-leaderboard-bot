@@ -31,7 +31,7 @@ function msToMinSec(ms) {
   return `${m}:${s}`;
 }
 
-function truncateName(name, maxLen = 14) {
+function truncateName(name, maxLen = 30) {
   return name.length <= maxLen ? name : name.slice(0, maxLen - 3) + "...";
 }
 
