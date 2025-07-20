@@ -84,10 +84,12 @@ function buildEmbed(data) {
 
   lb.slice(0, TOP_N).forEach((entry, idx) => {
     const place = idx + 1;
-    const medal = medals[place] ? `${medals[place]} ` : "";
+    const medal = medals[place] || "";
     const name = truncateName(entry.name || "Unknown");
     const time = msToMinSec(entry.laptime || 0);
-    description += `${place}. ${medal}\`${time}\` — **${name}**\n`;
+    description += `${place}. \`${time}\` — **${name}**${
+      medal ? " " + medal : ""
+    }\n`;
   });
 
   const embed = new EmbedBuilder()
