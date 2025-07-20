@@ -1,0 +1,11 @@
+{
+  "name": "ac-elite-leaderboard-bot",
+  "version": "1.0.0",
+  "main": "send_leaderboard.js",
+  "type": "commonjs",
+  "dependencies": {
+    "basic-ftp": "^5.0.2",
+    "discord.js": "^14.13.0",
+    "dotenv": "^16.4.5"
+  }
+}

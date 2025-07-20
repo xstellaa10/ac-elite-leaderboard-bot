@@ -5,3 +5,8 @@ __pycache__/
 
 # FTP‑dumps
 leaderboard.json
+
+node_modules/
+.env
+discord_message_id.txt
+__mid.tmp
