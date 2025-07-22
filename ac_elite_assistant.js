@@ -16,7 +16,6 @@ const path = require("path");
 
 /* ======================= CONFIGURATION ======================= */
 
-// Rank structure (adjust as needed)
 const RANKS = [
   { name: "Platinum Licence", min: 700, roleId: "1397007839456657478" },
   { name: "Gold Licence", min: 500, roleId: "1396647621187076248" },
@@ -24,16 +23,14 @@ const RANKS = [
   { name: "Bronze Licence", min: 0, roleId: "1396647702766420061" },
 ];
 
-// Channel and role IDs (FILL THESE IN for your server)
-const RANK_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
-const MOD_CHANNEL_ID = "1397236106881400872"; // Channel for mod commands (e.g. #🛠️・mod-tools)
+const RANK_CHANNEL_ID = "1397020407701307545"; // e.g. #🪪claim-licence
+const MOD_CHANNEL_ID = "1397236106881400872"; // e.g. #🛠️・mod-tools
 const MOD_ROLE_IDS = [
   "835038837646295071", // Creator
   "835174572125847612", // Admin
   "950564342015873034", // Moderator
 ];
 
-// FTP & file settings
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
 const LINKED_USERS_FILE = "linked_users.json";
 const RANK_FILE = "rank.json";
@@ -46,7 +43,6 @@ const DEFAULT_LEADERBOARD_IMAGE =
 
 /* ============ END CONFIGURATION ============ */
 
-// FTP download utility
 async function ftpDownload(filename, localPath) {
   const client = new ftp.Client();
   try {
@@ -61,7 +57,6 @@ async function ftpDownload(filename, localPath) {
   }
 }
 
-// FTP upload utility (for message id)
 async function ftpUpload(localPath, remoteName) {
   const client = new ftp.Client();
   try {
@@ -75,7 +70,6 @@ async function ftpUpload(localPath, remoteName) {
   }
 }
 
-// Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -87,7 +81,6 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-// Helper: average calculation
 function getAverage(driver) {
   const points = typeof driver.points === "number" ? driver.points : 0;
   const wins = typeof driver.wins === "number" ? driver.wins : 0;
@@ -96,13 +89,11 @@ function getAverage(driver) {
   return (points + wins + kilometers) / 3;
 }
 
-// Helper: determine rank
 function getRank(driver) {
   const avg = getAverage(driver);
   return RANKS.find((rank) => avg >= rank.min) || null;
 }
 
-// On ready: auto-place claim button in the correct channel
 client.once("ready", async () => {
   console.log(`✅ AC Elite Assistant online as ${client.user.tag}`);
 
@@ -162,7 +153,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     ephemeral: true,
   });
 
-  // Send DM
   try {
     await interaction.user.send(
       "Hi! Please send your **Steam profile link** or **Steam64 ID** (GUID) to link your Discord account.\n" +
@@ -181,7 +171,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 /* === Process DMs: Link and assign rank === */
 client.on("messageCreate", async (msg) => {
-  // Only react to DMs not sent by the bot itself
   if (msg.channel.type !== 1 || msg.author.bot) return;
 
   const match = msg.content.match(/(7656119\d{10,12})/);
@@ -198,7 +187,6 @@ client.on("messageCreate", async (msg) => {
     linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE, "utf8"));
   }
 
-  // Already linked?
   const alreadyLinked = Object.values(linked).includes(msg.author.id);
   if (
     alreadyLinked &&
@@ -212,7 +200,6 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // Save new or changed link
   linked[steamGuid] = msg.author.id;
   fs.writeFileSync(LINKED_USERS_FILE, JSON.stringify(linked, null, 2));
   await msg.reply(
@@ -227,7 +214,6 @@ client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
   if (msg.channel.id !== MOD_CHANNEL_ID) return;
 
-  // Check: user has one of the allowed roles
   const allowed = MOD_ROLE_IDS.some((roleId) =>
     msg.member.roles.cache.has(roleId)
   );
@@ -236,24 +222,22 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // !changetrack <track> <car> [track_image_url]
+  // !changetrack <track> [car]
   if (msg.content.startsWith("!changetrack")) {
     const args = msg.content.split(" ");
-    if (args.length < 3) {
-      msg.reply("Usage: `!changetrack <track> <car> [track_image_url]`");
+    if (args.length < 2) {
+      msg.reply("Usage: `!changetrack <track> [car]`");
       return;
     }
-    const [, track, car, ...imageArr] = args;
-    const track_image_url = imageArr.join(" ");
-    const newSettings = { track, car, track_image_url };
+    const track = args[1];
+    const car = args[2] ? args[2] : "tatuusfa1";
+    const newSettings = { track, car };
     fs.writeFileSync(
       path.join(__dirname, SETTINGS_FILE),
       JSON.stringify(newSettings, null, 2)
     );
     msg.reply(
-      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\`${
-        track_image_url ? `\n**Image:** ${track_image_url}` : ""
-      }`
+      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\``
     );
     console.log(
       `[MOD] Settings updated by ${msg.author.tag}: ${JSON.stringify(
@@ -273,7 +257,6 @@ client.on("messageCreate", async (msg) => {
 
   // !updateleaderboard (manual leaderboard post)
   if (msg.content.startsWith("!updateleaderboard")) {
-    // Read the settings
     let settings;
     try {
       settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
@@ -282,17 +265,11 @@ client.on("messageCreate", async (msg) => {
       return;
     }
     if (!settings.track || !settings.car) {
-      msg.reply("Track or car not set. Use !changetrack <track> <car> first.");
+      msg.reply("Track or car not set. Use !changetrack <track> [car] first.");
       return;
     }
-    // Fallback image
-    const imageUrl =
-      settings.track_image_url && settings.track_image_url.trim().length > 0
-        ? settings.track_image_url
-        : DEFAULT_LEADERBOARD_IMAGE;
-
     try {
-      await postLeaderboard(settings.track, settings.car, imageUrl, msg);
+      await postLeaderboard(settings.track, settings.car, msg);
       msg.reply("Leaderboard updated!");
     } catch (err) {
       console.error("[ERROR] Leaderboard update:", err);
@@ -302,7 +279,6 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
-/* === Rank assignment functions === */
 async function assignRankToMember(guild, steamGuid, discordId) {
   try {
     await ftpDownload(RANK_FILE, LOCAL_RANK_FILE);
@@ -350,8 +326,7 @@ async function assignAllRanks(guild) {
 }
 
 /* === Leaderboard post function === */
-async function postLeaderboard(track, car, imageUrl, msg = null) {
-  // Download leaderboard.json from FTP
+async function postLeaderboard(track, car, msg = null) {
   await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
   const raw = fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE), "utf8");
   const data = JSON.parse(raw);
@@ -384,7 +359,6 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
     .setTitle("AC Elite Server")
     .setColor(0xff0000)
     .setThumbnail(DEFAULT_LEADERBOARD_IMAGE)
-    .setImage(imageUrl)
     .setDescription(description)
     .setFooter({
       text: "Data by AC Elite Leaderboard",
@@ -392,11 +366,9 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
     })
     .setTimestamp();
 
-  // Get webhook from env
   const webhookUrl = process.env.DISCORD_WEBHOOK;
   const webhook = new WebhookClient({ url: webhookUrl });
 
-  // Get or create message id file
   let savedId = null;
   try {
     const tmp = path.join(__dirname, "__mid.tmp");
@@ -404,7 +376,6 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
     savedId = fs.readFileSync(tmp, "utf8").trim();
     fs.unlinkSync(tmp);
   } catch {}
-  // Update or create message
   if (savedId) {
     try {
       await webhook.editMessage(savedId, { embeds: [embed] });
@@ -414,12 +385,10 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
       if (err.code !== 10008) {
         throw err;
       }
-      // else: message not found, fall through to create
     }
   }
   const sent = await webhook.send({ embeds: [embed] });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
-  // Optionally upload new id via ftp
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
   console.log(`✅ Posted new leaderboard message ${sent.id}`);
 }
