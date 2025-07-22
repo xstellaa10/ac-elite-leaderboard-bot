@@ -1,5 +1,5 @@
 {
-  "name": "ac-elite-leaderboard-bot",
+  "name": "ac-elite-bots",
   "version": "1.0.0",
   "main": "send_leaderboard.js",
   "type": "commonjs",
