@@ -12,11 +12,9 @@ const fs = require("fs");
 const ftp = require("basic-ftp");
 const path = require("path");
 
-/* =======================
-   >>> CONFIGURATIE <<<
-   ======================= */
+/* ======================= CONFIGURATION ======================= */
 
-// Vul hier je eigen Discord role-ID's en de score-drempels in.
+// Fill in your Discord role IDs and thresholds here.
 const RANKS = [
   {
     name: "Platinum Licence",
@@ -40,28 +38,28 @@ const RANKS = [
   },
 ];
 
-// FTP settings uit je .env of Github secrets
+// Set your channel ID here
+const RANK_CHANNEL_ID = "1397020407701307545"; // <-- Replace with your own channel ID as a string!
+
+// FTP settings from .env
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
 
-// Filenamen
+// Filenames
 const LINKED_USERS_FILE = "linked_users.json";
 const RANK_FILE = "rank.json";
 const LOCAL_RANK_FILE = path.join(__dirname, RANK_FILE);
 
-// Kanaalnaam waar je het koppelbericht wilt
-const RANK_CHANNEL_NAME = "rank-test";
+/* ============ END CONFIGURATION ============ */
 
-// ============ EINDE CONFIGURATIE ============
-
-/* === FTP functie === */
+/* === FTP download function === */
 async function ftpDownload(filename, localPath) {
   const client = new ftp.Client();
   try {
     await client.access({ host: FTP_HOST, user: FTP_USER, password: FTP_PASS });
     await client.downloadTo(localPath, filename);
-    console.log(`[FTP] Gedownload: ${filename} -> ${localPath}`);
+    console.log(`[FTP] Downloaded: ${filename} -> ${localPath}`);
   } catch (err) {
-    console.error("[FTP ERROR] Kan niet downloaden:", err);
+    console.error("[FTP ERROR] Download failed:", err);
     throw err;
   } finally {
     client.close();
@@ -80,117 +78,116 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-/* === Helper: gemiddelde berekenen === */
-function getAverage(rijder) {
-  const points = typeof rijder.points === "number" ? rijder.points : 0;
-  const wins = typeof rijder.wins === "number" ? rijder.wins : 0;
+/* === Helper: Calculate average === */
+function getAverage(driver) {
+  const points = typeof driver.points === "number" ? driver.points : 0;
+  const wins = typeof driver.wins === "number" ? driver.wins : 0;
   const kilometers =
-    typeof rijder.kilometers === "number" ? rijder.kilometers : 0;
+    typeof driver.kilometers === "number" ? driver.kilometers : 0;
   return (points + wins + kilometers) / 3;
 }
 
-/* === Helper: rank bepalen === */
-function getRank(rijder) {
-  const avg = getAverage(rijder);
+/* === Helper: Determine rank === */
+function getRank(driver) {
+  const avg = getAverage(driver);
   const found = RANKS.find((rank) => avg >= rank.min);
   return found ? found : null;
 }
 
-/* === Bij opstarten: koppelbutton automatisch plaatsen === */
+/* === On startup: Automatically send claim button in channel === */
 client.once("ready", async () => {
-  console.log(`✅ Bot online als ${client.user.tag}`);
+  console.log(`✅ Bot online as ${client.user.tag}`);
 
-  // Button auto in kanaal (indien nog niet aanwezig)
+  // Auto-send button to the channel (if not already sent)
   try {
-    const channel = client.channels.cache.find(
-      (c) => c.name === RANK_CHANNEL_NAME && c.isTextBased()
-    );
+    const channel = await client.channels.fetch(RANK_CHANNEL_ID);
+
     if (!channel) {
-      console.log("[ERROR] Koppel-kanaal niet gevonden!");
+      console.log("[ERROR] Claim channel not found!");
     } else {
       const messages = await channel.messages.fetch({ limit: 50 });
       const alreadySent = messages.find(
         (m) =>
           m.author.id === client.user.id &&
-          m.content.includes("Wil je je Steam-account koppelen")
+          m.content.includes("Do you want to link your Steam account")
       );
 
       if (!alreadySent) {
         const button = new ButtonBuilder()
           .setCustomId("link_steam")
-          .setLabel("Koppel Steam")
+          .setLabel("Link Steam")
           .setStyle(ButtonStyle.Primary);
 
         const row = new ActionRowBuilder().addComponents(button);
 
         await channel.send({
           content:
-            "Wil je je Steam-account koppelen aan je Discord? Klik op de button hieronder.\n\nNa koppelen krijg je automatisch een rankrol toegewezen op basis van je prestaties!",
+            "Do you want to link your Steam account to Discord? Click the button below.\n\nAfter linking, you will automatically receive a rank role based on your stats!",
           components: [row],
         });
         console.log(
-          "[INFO] Koppelbericht automatisch verzonden in #" + RANK_CHANNEL_NAME
+          `[INFO] Claim message automatically sent in #${channel.name} (${channel.id})`
         );
       } else {
-        console.log("[INFO] Koppelbericht bestaat al in #" + RANK_CHANNEL_NAME);
+        console.log(
+          `[INFO] Claim message already exists in #${channel.name} (${channel.id})`
+        );
       }
     }
   } catch (err) {
-    console.log("[ERROR] Fout bij auto-button plaatsen:", err);
+    console.log("[ERROR] Error while auto-placing button:", err);
   }
 
-  // AUTO MODE VOOR GITHUB ACTION
+  // AUTO MODE FOR GITHUB ACTION
   if (process.argv[2] === "auto") {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllRanks(guild);
-    console.log("[AUTO] Alle gekoppelde leden automatisch gerankt.");
+    console.log("[AUTO] All linked members ranked automatically.");
     process.exit(0);
   }
 });
 
-/* === Button click: DM sturen voor koppeling === */
+/* === Button click: Send DM for linking === */
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isButton()) return;
   if (interaction.customId !== "link_steam") return;
 
   await interaction.reply({
-    content: "Check je DM! ✉️",
+    content: "Check your DM! ✉️",
     ephemeral: true,
   });
 
-  // DM sturen
+  // Send DM
   try {
     await interaction.user.send(
-      "Hoi! Stuur hier je **Steam profiel link** of **Steam64 ID** (GUID) om te koppelen aan je Discord account.\n" +
-        "Voorbeeld:\n`76561198000000000` of `https://steamcommunity.com/profiles/76561198000000000`"
+      "Hi! Please send your **Steam profile link** or **Steam64 ID** (GUID) to link your Discord account.\n" +
+        "Example:\n`76561198000000000` or `https://steamcommunity.com/profiles/76561198000000000`"
     );
-    console.log(
-      `[INFO] DM gestuurd aan ${interaction.user.tag} voor koppeling`
-    );
+    console.log(`[INFO] DM sent to ${interaction.user.tag} for linking`);
   } catch (err) {
     await interaction.followUp({
       content:
-        "Kon je geen DM sturen! Zet DM's aan of neem contact op met een admin.",
+        "Could not send you a DM! Please enable DMs or contact an admin.",
       ephemeral: true,
     });
-    console.log(`[ERROR] Kan DM niet sturen aan ${interaction.user.tag}:`, err);
+    console.log(`[ERROR] Could not DM ${interaction.user.tag}:`, err);
   }
 });
 
-/* === DM verwerken: koppelen en rank geven === */
+/* === Process DMs: Link and assign rank === */
 client.on("messageCreate", async (msg) => {
-  // Alleen reageren op DM's die NIET van de bot zelf zijn
+  // Only react to DMs not sent by the bot itself
   if (msg.channel.type !== 1 || msg.author.bot) return;
 
-  console.log(`[DEBUG] Ontvangen DM van ${msg.author.tag}: ${msg.content}`);
+  console.log(`[DEBUG] DM received from ${msg.author.tag}: ${msg.content}`);
 
-  // Steam GUID zoeken in bericht (17 cijfers)
+  // Look for Steam GUID (17 digits)
   const match = msg.content.match(/(7656119\d{10,12})/);
   if (!match) {
     await msg.reply(
-      "Ongeldige Steam64 ID. Stuur alleen je 17-cijferige Steam64 ID of volledige Steam profiel link."
+      "Invalid Steam64 ID. Please only send your 17-digit Steam64 ID or full Steam profile link."
     );
-    console.log("[WARN] Geen geldige Steam GUID gevonden in DM");
+    console.log("[WARN] No valid Steam GUID found in DM");
     return;
   }
   const steamGuid = match[1];
@@ -200,7 +197,7 @@ client.on("messageCreate", async (msg) => {
     linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE, "utf8"));
   }
 
-  // Koppeling al bekend?
+  // Already linked?
   const alreadyLinked = Object.values(linked).includes(msg.author.id);
   if (
     alreadyLinked &&
@@ -209,77 +206,77 @@ client.on("messageCreate", async (msg) => {
     )
   ) {
     await msg.reply(
-      `Je Steam GUID \`${steamGuid}\` is al gekoppeld aan jouw Discord account. Zie je je rol niet? Typ \`!assignranks\` in de server.`
+      `Your Steam GUID \`${steamGuid}\` is already linked to your Discord account. Don't see your role? Type \`!assignranks\` in the server.`
     );
-    console.log("[INFO] Dubbele koppeling gedetecteerd, geen actie nodig");
+    console.log("[INFO] Duplicate linking detected, no action needed");
     return;
   }
 
-  // Nieuw of gewijzigde koppeling opslaan
+  // Save new or changed link
   linked[steamGuid] = msg.author.id;
   fs.writeFileSync(LINKED_USERS_FILE, JSON.stringify(linked, null, 2));
   await msg.reply(
-    `Gelukt! Je Steam GUID \`${steamGuid}\` is gekoppeld aan je Discord account. Je krijgt nu automatisch de juiste rol toegewezen!`
+    `Success! Your Steam GUID \`${steamGuid}\` is now linked to your Discord account. You will automatically get your correct role!`
   );
   console.log(
-    `[INFO] Koppeling opgeslagen: ${steamGuid} -> ${msg.author.tag} (${msg.author.id})`
+    `[INFO] Link saved: ${steamGuid} -> ${msg.author.tag} (${msg.author.id})`
   );
 
-  // Direct rank geven
+  // Immediately assign rank
   const guild = await client.guilds.fetch(process.env.GUILD_ID);
   await assignRankToMember(guild, steamGuid, msg.author.id);
 });
 
-/* === Rank functies === */
+/* === Rank functions === */
 
 async function assignRankToMember(guild, steamGuid, discordId) {
-  // Download de nieuwste rank.json voor elke actie
+  // Download the latest rank.json for each action
   try {
     await ftpDownload(RANK_FILE, LOCAL_RANK_FILE);
   } catch (err) {
-    console.log("[ERROR] Kan rank.json niet downloaden.");
+    console.log("[ERROR] Could not download rank.json.");
     return;
   }
   if (!fs.existsSync(LOCAL_RANK_FILE)) {
-    console.log("[ERROR] rank.json niet gevonden na downloaden!");
+    console.log("[ERROR] rank.json not found after download!");
     return;
   }
   const data = JSON.parse(fs.readFileSync(LOCAL_RANK_FILE, "utf8"));
-  const rijder = data.find((r) => r.guid === steamGuid);
-  if (!rijder) {
-    console.log("[ERROR] Geen rijder gevonden voor GUID", steamGuid);
+  const driver = data.find((r) => r.guid === steamGuid);
+  if (!driver) {
+    console.log("[ERROR] No driver found for GUID", steamGuid);
     return;
   }
 
-  const rank = getRank(rijder);
+  const rank = getRank(driver);
   if (!rank) {
-    console.log(`[ERROR] Geen rank gevonden voor ${rijder.name}`);
+    console.log(`[ERROR] No rank found for ${driver.name}`);
     return;
   }
 
   const member = await guild.members.fetch(discordId).catch((err) => {
-    console.log("[ERROR] Member niet gevonden:", discordId, err);
+    console.log("[ERROR] Member not found:", discordId, err);
     return null;
   });
   if (!member) {
-    console.log("[ERROR] Member niet gevonden of geen toegang:", discordId);
+    console.log("[ERROR] Member not found or inaccessible:", discordId);
     return;
   }
 
-  // Alle bekende rankrollen verwijderen
+  // Remove all known rank roles
   await member.roles.remove(RANKS.map((r) => r.roleId)).catch((err) => {
-    console.log("[WARN] Kan oude rollen niet verwijderen:", err);
+    console.log("[WARN] Could not remove old roles:", err);
   });
 
-  // Nieuwe rank geven
+  // Add new rank role
   await member.roles.add(rank.roleId).catch((err) => {
-    console.log("[ERROR] Kan rol niet toevoegen:", err);
+    console.log("[ERROR] Could not assign role:", err);
   });
 
   console.log(
-    `[RESULT] Gegeven: ${rijder.name} (${discordId}) -> ${
+    `[RESULT] Assigned: ${driver.name} (${discordId}) -> ${
       rank.name
-    } (avg=${getAverage(rijder)})`
+    } (avg=${getAverage(driver)})`
   );
 }
 
@@ -287,11 +284,11 @@ async function assignAllRanks(guild) {
   try {
     await ftpDownload(RANK_FILE, LOCAL_RANK_FILE);
   } catch (err) {
-    console.log("[ERROR] Kan rank.json niet downloaden.");
+    console.log("[ERROR] Could not download rank.json.");
     return;
   }
   if (!fs.existsSync(LOCAL_RANK_FILE)) {
-    console.log("[ERROR] Geen rank.json gevonden na downloaden!");
+    console.log("[ERROR] rank.json not found after download!");
     return;
   }
 
@@ -299,34 +296,34 @@ async function assignAllRanks(guild) {
   const data = JSON.parse(fs.readFileSync(LOCAL_RANK_FILE, "utf8"));
 
   for (const [steamGuid, discordId] of Object.entries(linked)) {
-    const rijder = data.find((r) => r.guid === steamGuid);
-    if (!rijder) {
-      console.log("[WARN] Rijder niet gevonden voor GUID:", steamGuid);
+    const driver = data.find((r) => r.guid === steamGuid);
+    if (!driver) {
+      console.log("[WARN] Driver not found for GUID:", steamGuid);
       continue;
     }
-    const rank = getRank(rijder);
+    const rank = getRank(driver);
     if (!rank) {
-      console.log(`[ERROR] Geen rank gevonden voor ${rijder.name}`);
+      console.log(`[ERROR] No rank found for ${driver.name}`);
       continue;
     }
     const member = await guild.members.fetch(discordId).catch((err) => {
-      console.log("[WARN] Member niet gevonden:", discordId, err);
+      console.log("[WARN] Member not found:", discordId, err);
       return null;
     });
     if (!member) {
-      console.log("[WARN] Member niet gevonden of geen toegang:", discordId);
+      console.log("[WARN] Member not found or inaccessible:", discordId);
       continue;
     }
     await member.roles.remove(RANKS.map((r) => r.roleId)).catch((err) => {
-      console.log("[WARN] Kan oude rollen niet verwijderen:", err);
+      console.log("[WARN] Could not remove old roles:", err);
     });
     await member.roles.add(rank.roleId).catch((err) => {
-      console.log("[WARN] Kan rol niet toevoegen:", err);
+      console.log("[WARN] Could not assign role:", err);
     });
     console.log(
-      `[RESULT] Gegeven: ${rijder.name} (${discordId}) -> ${
+      `[RESULT] Assigned: ${driver.name} (${discordId}) -> ${
         rank.name
-      } (avg=${getAverage(rijder)})`
+      } (avg=${getAverage(driver)})`
     );
   }
 }
