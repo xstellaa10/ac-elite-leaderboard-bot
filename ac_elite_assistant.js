@@ -9,6 +9,7 @@ const {
   Events,
   WebhookClient,
   EmbedBuilder,
+  PermissionsBitField,
 } = require("discord.js");
 const fs = require("fs");
 const ftp = require("basic-ftp");
@@ -27,12 +28,12 @@ const RANKS = [
 // Channel and role IDs (FILL THESE IN for your server)
 const RANK_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
 const MOD_CHANNEL_ID = "1397236106881400872"; // Channel for mod commands (e.g. #🛠️・mod-tools)
-const MOD_LOG_CHANNEL_ID = "1397365113794855033"; // Channel for mod command logs
 const MOD_ROLE_IDS = [
   "835038837646295071", // Creator
   "835174572125847612", // Admin
   "950564342015873034", // Moderator
 ];
+const MOD_LOG_CHANNEL_ID = "1397365113794855033"; // Channel for mod logs
 
 // FTP & file settings
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
@@ -228,71 +229,70 @@ client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
   if (msg.channel.id !== MOD_CHANNEL_ID) return;
 
-  // Logging channel
-  let logChannel = null;
-  try {
-    logChannel = await client.channels.fetch(MOD_LOG_CHANNEL_ID);
-  } catch (e) {}
-
   // Check: user has one of the allowed roles
   const allowed = MOD_ROLE_IDS.some((roleId) =>
     msg.member.roles.cache.has(roleId)
   );
   if (!allowed) {
-    msg.reply("You do not have permission to use bot moderator commands.");
-    setTimeout(() => msg.delete().catch(() => {}), 5000);
-    if (logChannel)
-      logChannel.send(`🚫 ${msg.author.tag} DENIED: ${msg.content}`);
+    msg
+      .reply("You do not have permission to use bot moderator commands.")
+      .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
     return;
   }
 
-  // !help command
-  if (msg.content.startsWith("!help")) {
-    const helpText = `**Mod Commands for AC Elite Assistant:**\n
-\`!changetrack <track> [car]\`
-- Set the leaderboard track (car defaults to *tatuusfa1* if omitted).
-
-\`!assignranks\`
-- Assigns all ranks again using the latest data.
-
-\`!updateleaderboard\`
-- Instantly updates the leaderboard message.
-
-*Commands only work in this channel for users with Creator/Admin/Moderator role.*`;
-    const sentMsg = await msg.reply(helpText);
-    setTimeout(() => sentMsg.delete().catch(() => {}), 60000); // 1 min visible
-    setTimeout(() => msg.delete().catch(() => {}), 3000);
-    if (logChannel) {
-      logChannel.send(`🛠️ ${msg.author.tag} used !help`);
+  // !achelp command: send a DM with all commands
+  if (msg.content.trim().toLowerCase() === "!achelp") {
+    try {
+      await msg.author.send(
+        `**AC Elite Assistant Bot — Moderator Commands**\n\n` +
+          `• \`!changetrack <track> [car]\` — Change the leaderboard to a different track (car is optional, default: tatuusfa1).\n` +
+          `• \`!assignranks\` — Manually update all ranks (roles) for linked users.\n` +
+          `• \`!updateleaderboard\` — Manually update the leaderboard embed with the current settings.\n` +
+          `\n_Commands can only be used in <#${MOD_CHANNEL_ID}>. Command messages will be automatically deleted after 10 seconds. All actions are logged in <#${MOD_LOG_CHANNEL_ID}>._`
+      );
+      msg
+        .reply("I've sent you a DM with all available commands!")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+    } catch (err) {
+      msg
+        .reply("Couldn't send you a DM — are your DMs open?")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
     }
     return;
   }
 
   // !changetrack <track> [car]
   if (msg.content.startsWith("!changetrack")) {
-    const args = msg.content.split(" ");
+    const args = msg.content.trim().split(" ");
     if (args.length < 2) {
-      const reply = await msg.reply("Usage: `!changetrack <track> [car]`");
-      setTimeout(() => reply.delete().catch(() => {}), 15000);
-      setTimeout(() => msg.delete().catch(() => {}), 3000);
+      msg
+        .reply("Usage: `!changetrack <track> [car]`")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
       return;
     }
-    const [, track, carArg] = args;
-    const car = carArg || "tatuusfa1";
+    const track = args[1];
+    const car = args[2] ? args[2] : "tatuusfa1";
     const newSettings = { track, car };
     fs.writeFileSync(
       path.join(__dirname, SETTINGS_FILE),
       JSON.stringify(newSettings, null, 2)
     );
-    const reply = await msg.reply(
-      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\``
-    );
-    setTimeout(() => reply.delete().catch(() => {}), 15000);
-    setTimeout(() => msg.delete().catch(() => {}), 3000);
-    if (logChannel)
-      logChannel.send(
-        `🛠️ ${msg.author.tag} updated track: ${track} | car: ${car}`
-      );
+    msg
+      .reply(
+        `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\``
+      )
+      .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+
+    // Log in mod-tools-logs
+    try {
+      const logChannel = await client.channels.fetch(MOD_LOG_CHANNEL_ID);
+      if (logChannel && logChannel.isTextBased()) {
+        logChannel.send(
+          `🔧 **${msg.author.tag}** used \`!changetrack\` — Track: \`${track}\`, Car: \`${car}\``
+        );
+      }
+    } catch {}
+    setTimeout(() => msg.delete().catch(() => {}), 10000);
     return;
   }
 
@@ -300,11 +300,17 @@ client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!assignranks")) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllRanks(guild);
-    const reply = await msg.reply("All linked members have now been ranked!");
-    setTimeout(() => reply.delete().catch(() => {}), 10000);
-    setTimeout(() => msg.delete().catch(() => {}), 3000);
-    if (logChannel)
-      logChannel.send(`🛠️ ${msg.author.tag} triggered !assignranks`);
+    msg
+      .reply("All linked members have now been ranked!")
+      .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+    // Log in mod-tools-logs
+    try {
+      const logChannel = await client.channels.fetch(MOD_LOG_CHANNEL_ID);
+      if (logChannel && logChannel.isTextBased()) {
+        logChannel.send(`🔧 **${msg.author.tag}** used \`!assignranks\``);
+      }
+    } catch {}
+    setTimeout(() => msg.delete().catch(() => {}), 10000);
     return;
   }
 
@@ -315,41 +321,41 @@ client.on("messageCreate", async (msg) => {
     try {
       settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
     } catch (e) {
-      const reply = await msg.reply(
-        "No leaderboard settings found. Use !changetrack first."
-      );
-      setTimeout(() => reply.delete().catch(() => {}), 15000);
-      setTimeout(() => msg.delete().catch(() => {}), 3000);
+      msg
+        .reply("No leaderboard settings found. Use !changetrack first.")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+      setTimeout(() => msg.delete().catch(() => {}), 10000);
       return;
     }
     if (!settings.track || !settings.car) {
-      const reply = await msg.reply(
-        "Track or car not set. Use !changetrack <track> [car] first."
-      );
-      setTimeout(() => reply.delete().catch(() => {}), 15000);
-      setTimeout(() => msg.delete().catch(() => {}), 3000);
+      msg
+        .reply("Track or car not set. Use !changetrack <track> [car] first.")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+      setTimeout(() => msg.delete().catch(() => {}), 10000);
       return;
     }
-
     try {
-      await postLeaderboard(settings.track, settings.car, msg);
-      const reply = await msg.reply("Leaderboard updated!");
-      setTimeout(() => reply.delete().catch(() => {}), 10000);
-      setTimeout(() => msg.delete().catch(() => {}), 3000);
-      if (logChannel)
-        logChannel.send(`🛠️ ${msg.author.tag} triggered !updateleaderboard`);
+      postLeaderboard(settings.track, settings.car, msg);
+      msg
+        .reply("Leaderboard updated!")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+      // Log in mod-tools-logs
+      client.channels
+        .fetch(MOD_LOG_CHANNEL_ID)
+        .then((logChannel) => {
+          if (logChannel && logChannel.isTextBased()) {
+            logChannel.send(
+              `🔧 **${msg.author.tag}** used \`!updateleaderboard\` for \`${settings.track}\` / \`${settings.car}\``
+            );
+          }
+        })
+        .catch(() => {});
     } catch (err) {
-      console.error("[ERROR] Leaderboard update:", err);
-      const reply = await msg.reply(
-        "Error updating leaderboard: " + (err.message || err)
-      );
-      setTimeout(() => reply.delete().catch(() => {}), 15000);
-      setTimeout(() => msg.delete().catch(() => {}), 3000);
-      if (logChannel)
-        logChannel.send(
-          `❌ ${msg.author.tag} failed !updateleaderboard: ${err}`
-        );
+      msg
+        .reply("Error updating leaderboard: " + (err.message || err))
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
     }
+    setTimeout(() => msg.delete().catch(() => {}), 10000);
     return;
   }
 });
@@ -470,7 +476,6 @@ async function postLeaderboard(track, car, msg = null) {
   }
   const sent = await webhook.send({ embeds: [embed] });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
-  // Optionally upload new id via ftp
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
   console.log(`✅ Posted new leaderboard message ${sent.id}`);
 }
