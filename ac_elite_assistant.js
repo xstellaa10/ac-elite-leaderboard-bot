@@ -211,19 +211,19 @@ client.on("messageCreate", async (msg) => {
   // Change track command
   if (msg.content.startsWith("!changetrack")) {
     const args = msg.content.split(" ");
-    if (args.length < 4) {
-      msg.reply("Usage: `!changetrack <track> <car> <track_image_url>`");
+    if (args.length < 2) {
+      msg.reply("Usage: `!changetrack <track> [car]`");
       return;
     }
-    const [, track, car, ...imageArr] = args;
-    const track_image_url = imageArr.join(" ");
-    const newSettings = { track, car, track_image_url };
+    const track = args[1];
+    const car = args[2] || "tatuusfa1";
+    const newSettings = { track, car };
     fs.writeFileSync(
       path.join(__dirname, SETTINGS_FILE),
       JSON.stringify(newSettings, null, 2)
     );
     msg.reply(
-      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\`\n**Image:** ${track_image_url}`
+      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\``
     );
     console.log(
       `[MOD] Settings updated by ${msg.author.tag}: ${JSON.stringify(

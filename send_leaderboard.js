@@ -5,21 +5,9 @@ const { WebhookClient, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 
-const SETTINGS_FILE = "leaderboard_settings.json";
-let SETTINGS = {
-  track: "ks_nurburgring_layout_gp_a",
-  car: "tatuusfa1",
-  track_image_url:
-    "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/nurburgring.png",
-};
-if (fs.existsSync(path.join(__dirname, SETTINGS_FILE))) {
-  SETTINGS = JSON.parse(
-    fs.readFileSync(path.join(__dirname, SETTINGS_FILE), "utf8")
-  );
-}
-const TRACK = SETTINGS.track;
-const CAR = SETTINGS.car;
-const TRACK_IMAGE_URL = SETTINGS.track_image_url;
+// Logo (blijft staan!)
+const AC_LOGO_URL =
+  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png";
 
 const {
   FTP_HOST = "",
@@ -30,8 +18,10 @@ const {
 
 const LEADERBOARD_FILE = "leaderboard.json";
 const MESSAGE_ID_FILE = "discord_message_id.txt";
+const SETTINGS_FILE = "leaderboard_settings.json";
 const TOP_N = 10;
 
+// Helper: time formatting
 function msToMinSec(ms) {
   const sec = ms / 1000;
   const m = Math.floor(sec / 60);
@@ -39,6 +29,7 @@ function msToMinSec(ms) {
   return `${m}:${s}`;
 }
 
+// Helper: name shortening
 function truncateName(name, maxLen = 30) {
   return name.length <= maxLen ? name : name.slice(0, maxLen - 3) + "...";
 }
@@ -74,20 +65,20 @@ async function saveMessageId(id) {
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
 }
 
-async function fetchLeaderboard() {
+async function fetchLeaderboard(track, car) {
   await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
   const raw = fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE), "utf8");
-  return JSON.parse(raw);
+  const data = JSON.parse(raw);
+  return data[track]?.[car] || [];
 }
 
-function buildEmbed(data) {
-  const lb = data[TRACK]?.[CAR] || [];
+function buildEmbed({ track, car }, lb) {
   lb.sort((a, b) => a.laptime - b.laptime);
   const medals = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
   let description =
-    `**Track:** \`${TRACK}\`\n` +
-    `**Car:** \`${CAR}\`\n\n` +
+    `**Track:** \`${track}\`\n` +
+    `**Car:** \`${car}\`\n\n` +
     `**Top ${TOP_N}:**\n`;
 
   lb.slice(0, TOP_N).forEach((entry, idx) => {
@@ -102,25 +93,21 @@ function buildEmbed(data) {
 
   const embed = new EmbedBuilder()
     .setAuthor({
-      name: "🏆 AC Elite Assistant Leaderboard",
+      name: "🏆 KMR Leaderboard",
       url: "https://acstuff.ru/s/q:race/online/join?httpPort=18283&ip=157.90.3.32",
-      iconURL:
-        "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png",
+      iconURL: AC_LOGO_URL,
     })
     .setTitle("AC Elite Server")
     .setURL(
       "https://acstuff.ru/s/q:race/online/join?httpPort=18283&ip=157.90.3.32"
     )
     .setColor(0xff0000)
-    .setThumbnail(
-      "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png"
-    )
-    .setImage(TRACK_IMAGE_URL)
+    .setThumbnail(AC_LOGO_URL)
+    //.setImage(...)  // image removed!
     .setDescription(description)
     .setFooter({
       text: "Data by AC Elite Leaderboard",
-      iconURL:
-        "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png",
+      iconURL: AC_LOGO_URL,
     })
     .setTimestamp();
 
@@ -128,9 +115,19 @@ function buildEmbed(data) {
 }
 
 async function main() {
-  const data = await fetchLeaderboard();
+  // Use settings file for track/car, fallback to defaults if not found
+  let settings = { track: "ks_nurburgring_layout_gp_a", car: "tatuusfa1" };
+  try {
+    if (fs.existsSync(path.join(__dirname, SETTINGS_FILE))) {
+      settings = JSON.parse(
+        fs.readFileSync(path.join(__dirname, SETTINGS_FILE), "utf8")
+      );
+    }
+  } catch {}
+
+  const lb = await fetchLeaderboard(settings.track, settings.car);
   const webhook = new WebhookClient({ url: DISCORD_WEBHOOK });
-  const embed = buildEmbed(data);
+  const embed = buildEmbed(settings, lb);
   const savedId = await getSavedMessageId();
 
   if (savedId) {
