@@ -138,7 +138,7 @@ client.once("ready", async () => {
     console.log("[ERROR] Error while auto-placing button:", err);
   }
 
-  // AUTO MODE FOR GITHUB ACTION
+  // AUTO MODE for cron or manual update
   if (process.argv[2] === "auto") {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllRanks(guild);
@@ -206,7 +206,7 @@ client.on("messageCreate", async (msg) => {
     )
   ) {
     await msg.reply(
-      `Your Steam GUID \`${steamGuid}\` is already linked to your Discord account. Don't see your role? Type \`!assignranks\` in the server.`
+      `Your Steam GUID \`${steamGuid}\` is already linked to your Discord account. If you don't see your role, just wait for the next update or ask an admin.`
     );
     console.log("[INFO] Duplicate linking detected, no action needed");
     return;
