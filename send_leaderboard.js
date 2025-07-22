@@ -5,11 +5,21 @@ const { WebhookClient, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 
-// Raw image URLs (pas eventueel aan)
-const TRACK_IMAGE_URL =
-  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/nurburgring.png";
-const AC_LOGO_URL =
-  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png";
+const SETTINGS_FILE = "leaderboard_settings.json";
+let SETTINGS = {
+  track: "ks_nurburgring_layout_gp_a",
+  car: "tatuusfa1",
+  track_image_url:
+    "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/nurburgring.png",
+};
+if (fs.existsSync(path.join(__dirname, SETTINGS_FILE))) {
+  SETTINGS = JSON.parse(
+    fs.readFileSync(path.join(__dirname, SETTINGS_FILE), "utf8")
+  );
+}
+const TRACK = SETTINGS.track;
+const CAR = SETTINGS.car;
+const TRACK_IMAGE_URL = SETTINGS.track_image_url;
 
 const {
   FTP_HOST = "",
@@ -20,8 +30,6 @@ const {
 
 const LEADERBOARD_FILE = "leaderboard.json";
 const MESSAGE_ID_FILE = "discord_message_id.txt";
-const TRACK = "ks_nurburgring_layout_gp_a";
-const CAR = "tatuusfa1";
 const TOP_N = 10;
 
 function msToMinSec(ms) {
@@ -94,21 +102,25 @@ function buildEmbed(data) {
 
   const embed = new EmbedBuilder()
     .setAuthor({
-      name: "🏆 KMR Leaderboard",
+      name: "🏆 AC Elite Assistant Leaderboard",
       url: "https://acstuff.ru/s/q:race/online/join?httpPort=18283&ip=157.90.3.32",
-      iconURL: AC_LOGO_URL,
+      iconURL:
+        "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png",
     })
     .setTitle("AC Elite Server")
     .setURL(
       "https://acstuff.ru/s/q:race/online/join?httpPort=18283&ip=157.90.3.32"
     )
     .setColor(0xff0000)
-    .setThumbnail(AC_LOGO_URL)
+    .setThumbnail(
+      "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png"
+    )
     .setImage(TRACK_IMAGE_URL)
     .setDescription(description)
     .setFooter({
       text: "Data by AC Elite Leaderboard",
-      iconURL: AC_LOGO_URL,
+      iconURL:
+        "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png",
     })
     .setTimestamp();
 
