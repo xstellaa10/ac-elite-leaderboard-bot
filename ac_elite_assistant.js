@@ -7,6 +7,8 @@ const {
   ButtonBuilder,
   ButtonStyle,
   Events,
+  WebhookClient,
+  EmbedBuilder,
 } = require("discord.js");
 const fs = require("fs");
 const ftp = require("basic-ftp");
@@ -22,9 +24,9 @@ const RANKS = [
   { name: "Bronze Licence", min: 0, roleId: "1396647702766420061" },
 ];
 
-// Channel and role IDs (FILL THESE IN for your server)
-const RANK_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
-const MOD_CHANNEL_ID = "1397236106881400872"; // Channel for mod commands (e.g. #🛠️・mod-tools)
+// Channel and role IDs
+const RANK_CHANNEL_ID = "1397020407701307545"; // #🪪claim-licence
+const MOD_CHANNEL_ID = "1397236106881400872"; // #🛠️・mod-tools
 const MOD_ROLE_IDS = [
   "835038837646295071", // Creator
   "835174572125847612", // Admin
@@ -38,9 +40,13 @@ const RANK_FILE = "rank.json";
 const LOCAL_RANK_FILE = path.join(__dirname, RANK_FILE);
 const SETTINGS_FILE = "leaderboard_settings.json";
 
-/* ============ END CONFIGURATION ============ */
+// Leaderboard embed settings
+const LEADERBOARD_WEBHOOK = process.env.LEADERBOARD_WEBHOOK;
+const LEADERBOARD_FILE = "leaderboard.json";
+const MESSAGE_ID_FILE = "discord_message_id.txt";
 
-// FTP download utility
+/* ============ FTP UTILS ============ */
+
 async function ftpDownload(filename, localPath) {
   const client = new ftp.Client();
   try {
@@ -55,7 +61,39 @@ async function ftpDownload(filename, localPath) {
   }
 }
 
-// Discord client
+async function ftpUpload(localPath, remoteName) {
+  const client = new ftp.Client();
+  await client.access({ host: FTP_HOST, user: FTP_USER, password: FTP_PASS });
+  await client.uploadFrom(localPath, remoteName);
+  client.close();
+}
+
+/* ============ LEADERBOARD MESSAGE UTILS ============ */
+
+async function getSavedMessageId() {
+  try {
+    const tmp = path.join(__dirname, "__mid.tmp");
+    await ftpDownload(MESSAGE_ID_FILE, tmp);
+    const id = fs.readFileSync(tmp, "utf8").trim();
+    fs.unlinkSync(tmp);
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+async function saveMessageId(id) {
+  fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), id);
+  await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
+}
+
+async function fetchLeaderboard() {
+  await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
+  const raw = fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE), "utf8");
+  return JSON.parse(raw);
+}
+
+/* ============ DISCORD CLIENT ============ */
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -67,7 +105,7 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-// Helper: average calculation
+/* ============ RANK UTILS ============ */
 function getAverage(driver) {
   const points = typeof driver.points === "number" ? driver.points : 0;
   const wins = typeof driver.wins === "number" ? driver.wins : 0;
@@ -76,13 +114,59 @@ function getAverage(driver) {
   return (points + wins + kilometers) / 3;
 }
 
-// Helper: determine rank
 function getRank(driver) {
   const avg = getAverage(driver);
   return RANKS.find((rank) => avg >= rank.min) || null;
 }
 
-// On ready: auto-place claim button in the correct channel
+/* ============ LEADERBOARD EMBED ============ */
+function buildLeaderboardEmbed(data, settings) {
+  const track = settings.track;
+  const car = settings.car;
+  const image = settings.track_image_url;
+  const lb = data[track]?.[car] || [];
+  lb.sort((a, b) => a.laptime - b.laptime);
+  const medals = { 1: "🥇", 2: "🥈", 3: "🥉" };
+  const TOP_N = 10;
+
+  let description =
+    `**Track:** \`${track}\`\n` +
+    `**Car:** \`${car}\`\n\n` +
+    `**Top ${TOP_N}:**\n`;
+
+  lb.slice(0, TOP_N).forEach((entry, idx) => {
+    const place = idx + 1;
+    const medal = medals[place] || "";
+    const name = (entry.name || "Unknown").substring(0, 28);
+    const laptime = entry.laptime || 0;
+    const min = Math.floor(laptime / 60000);
+    const sec = ((laptime % 60000) / 1000).toFixed(3).padStart(6, "0");
+    description += `${place}. \`${min}:${sec}\` — **${name}**${
+      medal ? " " + medal : ""
+    }\n`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: "🏆 KMR Leaderboard",
+      url: "https://acstuff.ru/s/q:race/online/join?httpPort=18283&ip=157.90.3.32",
+      iconURL:
+        "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png",
+    })
+    .setTitle("AC Elite Server")
+    .setColor(0xff0000)
+    .setDescription(description)
+    .setFooter({
+      text: "Data by AC Elite Leaderboard",
+      iconURL:
+        "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png",
+    })
+    .setTimestamp();
+  if (image) embed.setImage(image);
+  return embed;
+}
+
+/* ============ STARTUP: CLAIM BUTTON ============ */
 client.once("ready", async () => {
   console.log(`✅ AC Elite Assistant online as ${client.user.tag}`);
 
@@ -122,9 +206,19 @@ client.once("ready", async () => {
   } catch (err) {
     console.log("[ERROR] Error while auto-placing button:", err);
   }
+
+  // --- AUTO MODE (for cronjob every 30min or manual call) ---
+  if (process.argv[2] === "auto") {
+    const guild = await client.guilds.fetch(process.env.GUILD_ID);
+    await assignAllRanks(guild);
+    // Also update the leaderboard!
+    await updateLeaderboard();
+    console.log("[AUTO] All linked members ranked and leaderboard updated.");
+    process.exit(0);
+  }
 });
 
-/* === Claim Button click: Send DM for linking === */
+/* ============ CLAIM BUTTON HANDLER ============ */
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isButton()) return;
   if (interaction.customId !== "link_steam") return;
@@ -151,7 +245,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-/* === Process DMs: Link and assign rank === */
+/* ============ DM: LINK & ASSIGN RANK ============ */
 client.on("messageCreate", async (msg) => {
   // Only react to DMs not sent by the bot itself
   if (msg.channel.type !== 1 || msg.author.bot) return;
@@ -194,7 +288,7 @@ client.on("messageCreate", async (msg) => {
   await assignRankToMember(guild, steamGuid, msg.author.id);
 });
 
-/* === COMMANDS: For moderators/admins/creators in mod-tools channel === */
+/* ============ MOD COMMANDS ============ */
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
   if (msg.channel.id !== MOD_CHANNEL_ID) return;
@@ -208,16 +302,19 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // Change track command
+  // 1. Change track command
   if (msg.content.startsWith("!changetrack")) {
     const args = msg.content.split(" ");
     if (args.length < 2) {
-      msg.reply("Usage: `!changetrack <track> [car]`");
+      msg.reply(
+        "Usage: `!changetrack <track> [car]` (car defaults to tatuusfa1)"
+      );
       return;
     }
-    const track = args[1];
-    const car = args[2] || "tatuusfa1";
-    const newSettings = { track, car };
+    const [, track, carArg] = args;
+    const car = carArg || "tatuusfa1";
+    // Optionally: keep image support (leave blank or default)
+    const newSettings = { track, car, track_image_url: "" };
     fs.writeFileSync(
       path.join(__dirname, SETTINGS_FILE),
       JSON.stringify(newSettings, null, 2)
@@ -233,15 +330,28 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // Manual assignranks command
+  // 2. Manual assignranks command
   if (msg.content.startsWith("!assignranks")) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllRanks(guild);
     msg.reply("All linked members have now been ranked!");
     return;
   }
+
+  // 3. Manual leaderboard update command
+  if (msg.content.startsWith("!updateleaderboard")) {
+    try {
+      await updateLeaderboard();
+      msg.reply("Leaderboard updated!");
+    } catch (err) {
+      msg.reply("Error updating leaderboard: " + err.message);
+      console.log("[ERROR] Leaderboard update:", err);
+    }
+    return;
+  }
 });
 
+/* ============ RANK ASSIGNMENT ============ */
 async function assignRankToMember(guild, steamGuid, discordId) {
   try {
     await ftpDownload(RANK_FILE, LOCAL_RANK_FILE);
@@ -285,6 +395,32 @@ async function assignAllRanks(guild) {
     if (!member) continue;
     await member.roles.remove(RANKS.map((r) => r.roleId)).catch(() => {});
     await member.roles.add(rank.roleId).catch(() => {});
+  }
+}
+
+/* ============ LEADERBOARD UPDATE ============ */
+async function updateLeaderboard() {
+  // Always use latest track settings
+  let settings = {
+    track: "ks_nurburgring_layout_gp_a",
+    car: "tatuusfa1",
+    track_image_url: "",
+  };
+  if (fs.existsSync(SETTINGS_FILE)) {
+    settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+  }
+  const data = await fetchLeaderboard();
+  const embed = buildLeaderboardEmbed(data, settings);
+  const webhook = new WebhookClient({ url: LEADERBOARD_WEBHOOK });
+  const savedId = await getSavedMessageId();
+
+  if (savedId) {
+    await webhook.editMessage(savedId, { embeds: [embed] });
+    console.log("[LEADERBOARD] Edited leaderboard message.");
+  } else {
+    const sent = await webhook.send({ embeds: [embed] });
+    await saveMessageId(sent.id);
+    console.log("[LEADERBOARD] Posted new leaderboard message.");
   }
 }
 
