@@ -508,7 +508,7 @@ async function postLeaderboard(track, car, imageUrl) {
     .setColor(0xff0000)
     .setThumbnail(DEFAULT_LEADERBOARD_IMAGE)
     .setFooter({
-      text: "Data by AC Elite Leaderboard",
+      text: "Data by AC Elite Assistant",
       iconURL: DEFAULT_LEADERBOARD_IMAGE,
     })
     .setTimestamp();
