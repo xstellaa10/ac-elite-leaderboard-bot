@@ -47,12 +47,13 @@ const DEFAULT_LEADERBOARD_IMAGE =
 
 /* ===================== END CONFIGURATION ===================== */
 
-// FTP utility functions
+// FTP download utility
 async function ftpDownload(filename, localPath) {
   const client = new ftp.Client();
   try {
     await client.access({ host: FTP_HOST, user: FTP_USER, password: FTP_PASS });
     await client.downloadTo(localPath, filename);
+    console.log(`[FTP] Downloaded: ${filename}`);
   } catch (err) {
     console.error("[FTP ERROR] Download failed:", err);
     throw err;
@@ -60,11 +61,13 @@ async function ftpDownload(filename, localPath) {
     client.close();
   }
 }
+// FTP upload utility
 async function ftpUpload(localPath, remoteName) {
   const client = new ftp.Client();
   try {
     await client.access({ host: FTP_HOST, user: FTP_USER, password: FTP_PASS });
     await client.uploadFrom(localPath, remoteName);
+    console.log(`[FTP] Uploaded: ${remoteName}`);
   } catch (err) {
     console.error("[FTP ERROR] Upload failed:", err);
   } finally {
@@ -72,7 +75,7 @@ async function ftpUpload(localPath, remoteName) {
   }
 }
 
-// Discord client setup
+// Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -114,7 +117,7 @@ function getLicence(d) {
   return LICENCES.find((l) => score >= l.min) || null;
 }
 
-// On ready: placement & auto-run
+// On ready
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   // Ensure claim button
@@ -128,18 +131,17 @@ client.once("ready", async () => {
           m.content.includes("link your Steam")
       )
     ) {
-      const btn = new ButtonBuilder()
+      const button = new ButtonBuilder()
         .setCustomId("link_steam")
         .setLabel("Link Steam")
         .setStyle(ButtonStyle.Primary);
       await ch.send({
         content: "Link your Steam account:",
-        components: [new ActionRowBuilder().addComponents(btn)],
+        components: [new ActionRowBuilder().addComponents(button)],
       });
     }
   } catch {}
-
-  // Auto mode for cron
+  // Auto mode
   if (process.argv[2] === "auto") {
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(`🚀 Auto run started at ${new Date().toLocaleString()}`);
@@ -147,11 +149,8 @@ client.once("ready", async () => {
     await assignAllLicences(guild);
     await log.send("✅ Auto-assignment of licences completed");
     const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE));
-    await postLeaderboard(
-      settings.track,
-      settings.car,
-      DEFAULT_LEADERBOARD_IMAGE
-    );
+    const img = settings.track_image_url?.trim() || DEFAULT_LEADERBOARD_IMAGE;
+    await postLeaderboard(settings.track, settings.car, img);
     await log.send(
       `✅ Auto leaderboard updated for ${settings.track}/${settings.car}`
     );
@@ -168,11 +167,11 @@ client.on(Events.InteractionCreate, async (i) => {
   } catch {}
 });
 
-// DM linking flow
+// DM linking
 client.on("messageCreate", async (m) => {
   if (m.channel.type !== 1 || m.author.bot) return;
   const match = m.content.match(/(7656119\d{10,12})/);
-  if (!match) return m.reply("Invalid Steam64 ID.");
+  if (!match) return m.reply("Invalid ID");
   const guid = match[1];
   let linked = {};
   if (fs.existsSync(LINKED_USERS_FILE))
@@ -188,33 +187,30 @@ client.on("messageCreate", async (m) => {
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot || msg.channel.id !== MOD_CHANNEL_ID) return;
   if (!MOD_ROLE_IDS.some((r) => msg.member.roles.cache.has(r))) {
-    const r = await msg.reply("You don't have permission.");
+    const r = await msg.reply("No permission.");
     setTimeout(() => {
       r.delete().catch();
       msg.delete().catch();
     }, 8000);
     return;
   }
-
-  // !changetrack [track] <car>
+  // !changetrack
   if (msg.content.startsWith("!changetrack")) {
-    const args = msg.content.split(/ +/).slice(1);
-    let track, car;
-    if (args.length === 1) {
-      track = "tatuusfa1";
-      car = args[0];
-    } else if (args.length >= 2) {
-      track = args[0];
-      car = args[1];
-    } else {
-      const r = await msg.reply("Usage: !changetrack [track] <car>");
+    const [, , track, car, ...img] = msg.content.split(/ +/);
+    if (!track || !car) {
+      const r = await msg.reply(
+        "Usage: !changetrack <track> <car> [image_url]"
+      );
       setTimeout(() => {
         r.delete().catch();
         msg.delete().catch();
       }, 8000);
       return;
     }
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ track, car }, null, 2));
+    fs.writeFileSync(
+      SETTINGS_FILE,
+      JSON.stringify({ track, car, track_image_url: img.join(" ") }, null, 2)
+    );
     const r = await msg.reply(`Settings updated: ${track}/${car}`);
     setTimeout(() => {
       r.delete().catch();
@@ -222,29 +218,31 @@ client.on("messageCreate", async (msg) => {
     }, 8000);
     return;
   }
-
   // !assignlicences
   if (msg.content.startsWith("!assignlicences")) {
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(
-      `🛠️ Manual assignLicences at ${new Date().toLocaleString()}`
+      `🛠️ Manual assignLicences by ${
+        msg.author.tag
+      } at ${new Date().toLocaleString()}`
     );
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllLicences(guild);
-    await log.send("✅ Manual assignLicences completed");
-    const r = await msg.reply("All linked members licenced!");
+    await log.send(`✅ Manual assignLicences completed by ${msg.author.tag}`);
+    const r = await msg.reply("All linked members have now been licenced!");
     setTimeout(() => {
       r.delete().catch();
       msg.delete().catch();
     }, 8000);
     return;
   }
-
   // !updateleaderboard
   if (msg.content.startsWith("!updateleaderboard")) {
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(
-      `🛠️ Manual leaderboard update at ${new Date().toLocaleString()}`
+      `🛠️ Manual leaderboard update by ${
+        msg.author.tag
+      } at ${new Date().toLocaleString()}`
     );
     let settings;
     try {
@@ -257,14 +255,12 @@ client.on("messageCreate", async (msg) => {
       }, 8000);
       return;
     }
+    const imageUrl =
+      settings.track_image_url?.trim() || DEFAULT_LEADERBOARD_IMAGE;
     try {
-      await postLeaderboard(
-        settings.track,
-        settings.car,
-        DEFAULT_LEADERBOARD_IMAGE
-      );
+      await postLeaderboard(settings.track, settings.car, imageUrl, msg);
       await log.send(
-        `✅ Manual leaderboard updated for ${settings.track}/${settings.car}`
+        `✅ Manual leaderboard updated by ${msg.author.tag} for ${settings.track}/${settings.car}`
       );
       const r = await msg.reply("Leaderboard updated!");
       setTimeout(() => {
@@ -283,7 +279,7 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
-// Assign a single member with breakdown
+// assign single
 async function assignLicenceToMember(guild, guid, did) {
   try {
     await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
@@ -297,7 +293,7 @@ async function assignLicenceToMember(guild, guid, did) {
   const lic = getLicence(driver);
   if (!lic) return;
   const score = calculateScore(driver);
-  const breakdown = [
+  const parts = [
     `money:${driver.points || 0}*0.5=${((driver.points || 0) * 0.5).toFixed(
       2
     )}`,
@@ -320,7 +316,8 @@ async function assignLicenceToMember(guild, guid, did) {
     `cr/100:${driver.cr_per_100km || 0}*25=${(
       -(driver.cr_per_100km || 0) * 25
     ).toFixed(2)}`,
-  ].join(", ");
+  ];
+  const breakdown = parts.join(", ");
   const member = await guild.members.fetch(did).catch(() => null);
   if (!member) return;
   await member.roles.remove(LICENCES.map((l) => l.roleId)).catch(() => {});
@@ -333,7 +330,7 @@ async function assignLicenceToMember(guild, guid, did) {
   );
 }
 
-// Assign all linked
+// assign all
 async function assignAllLicences(guild) {
   try {
     await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
@@ -353,7 +350,7 @@ async function assignAllLicences(guild) {
     const score = calculateScore(driver);
     await member.roles.remove(LICENCES.map((l) => l.roleId)).catch(() => {});
     await member.roles.add(lic.roleId).catch(() => {});
-    const breakdown = [
+    const parts = [
       `money:${driver.points || 0}*0.5=${((driver.points || 0) * 0.5).toFixed(
         2
       )}`,
@@ -376,7 +373,8 @@ async function assignAllLicences(guild) {
       `cr/100:${driver.cr_per_100km || 0}*25=${(
         -(driver.cr_per_100km || 0) * 25
       ).toFixed(2)}`,
-    ].join(", ");
+    ];
+    const breakdown = parts.join(", ");
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(
       `Auto-assigned **${lic.name}** to ${
@@ -386,8 +384,8 @@ async function assignAllLicences(guild) {
   }
 }
 
-// Leaderboard post
-async function postLeaderboard(track, car, imageUrl) {
+// leaderboard
+async function postLeaderboard(track, car, imageUrl, msg = null) {
   await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
   const data = JSON.parse(
     fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE))
@@ -421,6 +419,7 @@ async function postLeaderboard(track, car, imageUrl) {
     })
     .setTimestamp();
   const webhook = new WebhookClient({ url: process.env.DISCORD_WEBHOOK });
+
   let id = null;
   try {
     const tmp = path.join(__dirname, "__mid.tmp");
@@ -428,9 +427,11 @@ async function postLeaderboard(track, car, imageUrl) {
     id = fs.readFileSync(tmp, "utf8").trim();
     fs.unlinkSync(tmp);
   } catch {}
+
   if (id) {
     try {
       await webhook.editMessage(id, { embeds: [embed] });
+      console.log(`Edited leaderboard ${id}`);
       return;
     } catch (err) {
       if (err.code !== 10008) throw err;
@@ -439,6 +440,7 @@ async function postLeaderboard(track, car, imageUrl) {
   const sent = await webhook.send({ embeds: [embed] });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
+  console.log(`Posted new leaderboard ${sent.id}`);
 }
 
 client.login(process.env.DISCORD_BOT_TOKEN);
