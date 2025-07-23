@@ -177,9 +177,21 @@ client.on("messageCreate", async (m) => {
   let linked = {};
   if (fs.existsSync(LINKED_USERS_FILE))
     linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE));
+  if (linked[guid]) {
+    // Steam ID is al gelinkt, geef weer aan wie
+    if (linked[guid] === m.author.id) {
+      await m.reply(`Deze Steam64 ID is al gelinkt aan jouw account!`);
+    } else {
+      await m.reply(
+        `❌ Deze Steam64 ID is al gelinkt aan een andere gebruiker! Neem contact op met een moderator als dit niet klopt.`
+      );
+    }
+    return;
+  }
+  // Steam ID nog niet gelinkt, nu koppelen
   linked[guid] = m.author.id;
   fs.writeFileSync(LINKED_USERS_FILE, JSON.stringify(linked, null, 2));
-  await m.reply(`Linked ${guid}`);
+  await m.reply(`✅ Gelinkt aan jouw account! (${guid})`);
   const guild = await client.guilds.fetch(process.env.GUILD_ID);
   await assignLicenceToMember(guild, guid, m.author.id);
 });
