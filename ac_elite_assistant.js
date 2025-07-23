@@ -16,8 +16,8 @@ const path = require("path");
 
 /* ======================= CONFIGURATION ======================= */
 
-// Rank structure (adjust as needed)
-const RANKS = [
+// Licence structure (adjust as needed)
+const LICENCES = [
   { name: "Platinum Licence", min: 700, roleId: "1397007839456657478" },
   { name: "Gold Licence", min: 500, roleId: "1396647621187076248" },
   { name: "Silver Licence", min: 200, roleId: "1396647665172742164" },
@@ -25,7 +25,7 @@ const RANKS = [
 ];
 
 // Channel and role IDs (FILL THESE IN for your server)
-const RANK_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
+const LICENCE_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
 const MOD_CHANNEL_ID = "1397236106881400872"; // Channel for mod commands (e.g. #🛠️・mod-tools)
 const MOD_ROLE_IDS = [
   "835038837646295071", // Creator
@@ -36,8 +36,8 @@ const MOD_ROLE_IDS = [
 // FTP & file settings
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
 const LINKED_USERS_FILE = "linked_users.json";
-const RANK_FILE = "rank.json";
-const LOCAL_RANK_FILE = path.join(__dirname, RANK_FILE);
+const LICENCE_FILE = "rank.json"; // blijf zo heten want FTP bestand zo heet
+const LOCAL_LICENCE_FILE = path.join(__dirname, LICENCE_FILE);
 const SETTINGS_FILE = "leaderboard_settings.json";
 const LEADERBOARD_FILE = "leaderboard.json";
 const MESSAGE_ID_FILE = "discord_message_id.txt";
@@ -87,19 +87,46 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-// Helper: average calculation
-function getAverage(driver) {
-  const points = typeof driver.points === "number" ? driver.points : 0;
+/* === SCORE FORMULA: bereken de score voor licentie === */
+function calculateScore(driver) {
+  // Weegfactoren, pas aan naar wens:
+  // Money telt relatief laag mee, poles en fastest laps zwaar,
+  // veel infractions en crashes per 100km telt negatief mee
+
+  // Check alle properties bestaan en default naar 0
+  const money = typeof driver.points === "number" ? driver.points : 0;
   const wins = typeof driver.wins === "number" ? driver.wins : 0;
+  const podiums = typeof driver.podiums === "number" ? driver.podiums : 0;
+  const poles = typeof driver.poles === "number" ? driver.poles : 0;
+  const fastestLaps = typeof driver.flaps === "number" ? driver.flaps : 0;
   const kilometers =
     typeof driver.kilometers === "number" ? driver.kilometers : 0;
-  return (points + wins + kilometers) / 3;
+  const infractions = typeof driver.infr === "number" ? driver.infr : 0;
+  const crashes = typeof driver.crashes === "number" ? driver.crashes : 0;
+  const infrPer100km =
+    typeof driver.infr_per_100km === "number" ? driver.infr_per_100km : 0;
+  const crashesPer100km =
+    typeof driver.cr_per_100km === "number" ? driver.cr_per_100km : 0;
+
+  // Score berekening met gewichten:
+  const score =
+    money * 0.5 + // relatief laag
+    wins * 10 +
+    podiums * 8 +
+    poles * 15 +
+    fastestLaps * 12 +
+    kilometers * 0.2 -
+    infractions * 2 -
+    crashes * 3 -
+    infrPer100km * 20 -
+    crashesPer100km * 25;
+
+  return score;
 }
 
-// Helper: determine rank
-function getRank(driver) {
-  const avg = getAverage(driver);
-  return RANKS.find((rank) => avg >= rank.min) || null;
+function getLicence(driver) {
+  const score = calculateScore(driver);
+  return LICENCES.find((lic) => score >= lic.min) || null;
 }
 
 // On ready: auto-place claim button in the correct channel
@@ -107,7 +134,7 @@ client.once("ready", async () => {
   console.log(`✅ AC Elite Assistant online as ${client.user.tag}`);
 
   try {
-    const channel = await client.channels.fetch(RANK_CHANNEL_ID);
+    const channel = await client.channels.fetch(LICENCE_CHANNEL_ID);
     if (!channel) {
       console.log("[ERROR] Claim channel not found!");
     } else {
@@ -127,7 +154,7 @@ client.once("ready", async () => {
 
         await channel.send({
           content:
-            "Do you want to link your Steam account to Discord? Click the button below.\n\nAfter linking, you will automatically receive a rank role based on your stats!",
+            "Do you want to link your Steam account to Discord? Click the button below.\n\nAfter linking, you will automatically receive a licence role based on your stats!",
           components: [row],
         });
         console.log(
@@ -143,11 +170,11 @@ client.once("ready", async () => {
     console.log("[ERROR] Error while auto-placing button:", err);
   }
 
-  // AUTO MODE for cron (every 15 min) to update ranks
+  // AUTO MODE for cron (every 15 min) to update licences
   if (process.argv[2] === "auto") {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
-    await assignAllRanks(guild);
-    console.log("[AUTO] All linked members have now been ranked!");
+    await assignAllLicences(guild);
+    console.log("[AUTO] All linked members have now been licenced!");
     process.exit(0);
   }
 });
@@ -179,7 +206,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-/* === Process DMs: Link and assign rank === */
+/* === Process DMs: Link and assign licence === */
 client.on("messageCreate", async (msg) => {
   // Only react to DMs not sent by the bot itself
   if (msg.channel.type !== 1 || msg.author.bot) return;
@@ -219,7 +246,7 @@ client.on("messageCreate", async (msg) => {
     `Success! Your Steam GUID \`${steamGuid}\` is now linked to your Discord account. You will automatically get your correct role!`
   );
   const guild = await client.guilds.fetch(process.env.GUILD_ID);
-  await assignRankToMember(guild, steamGuid, msg.author.id);
+  await assignLicenceToMember(guild, steamGuid, msg.author.id);
 });
 
 /* === MOD/ADMIN COMMANDS: in mod-tools channel only === */
@@ -279,12 +306,12 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // !assignranks (manual assign)
-  if (msg.content.startsWith("!assignranks")) {
+  // !assignlicences (manual assign)
+  if (msg.content.startsWith("!assignlicences")) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
-    await assignAllRanks(guild);
+    await assignAllLicences(guild);
     const replyMsg = await msg.reply(
-      "All linked members have now been ranked!"
+      "All linked members have now been licenced!"
     );
     setTimeout(() => {
       replyMsg.delete().catch(() => {});
@@ -351,7 +378,7 @@ client.on("messageCreate", async (msg) => {
 **AC Elite Assistant Commands:**
 
 • \`!changetrack <track> <car> [track_image_url]\` — Change leaderboard track and car.
-• \`!assignranks\` — Manually assign ranks to all linked members.
+• \`!assignlicences\` — Manually assign licences to all linked members.
 • \`!updateleaderboard\` — Manually update the leaderboard post.
 • \`!achelp\` — Show this help message (sent as DM).
 
@@ -384,49 +411,49 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
-async function assignRankToMember(guild, steamGuid, discordId) {
+async function assignLicenceToMember(guild, steamGuid, discordId) {
   try {
-    await ftpDownload(RANK_FILE, LOCAL_RANK_FILE);
+    await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
   } catch (err) {
     console.log("[ERROR] Could not download rank.json.");
     return;
   }
-  if (!fs.existsSync(LOCAL_RANK_FILE)) return;
-  const data = JSON.parse(fs.readFileSync(LOCAL_RANK_FILE, "utf8"));
+  if (!fs.existsSync(LOCAL_LICENCE_FILE)) return;
+  const data = JSON.parse(fs.readFileSync(LOCAL_LICENCE_FILE, "utf8"));
   const driver = data.find((r) => r.guid === steamGuid);
   if (!driver) return;
 
-  const rank = getRank(driver);
-  if (!rank) return;
+  const licence = getLicence(driver);
+  if (!licence) return;
 
   const member = await guild.members.fetch(discordId).catch(() => null);
   if (!member) return;
 
-  await member.roles.remove(RANKS.map((r) => r.roleId)).catch(() => {});
-  await member.roles.add(rank.roleId).catch(() => {});
+  await member.roles.remove(LICENCES.map((r) => r.roleId)).catch(() => {});
+  await member.roles.add(licence.roleId).catch(() => {});
 }
 
-async function assignAllRanks(guild) {
+async function assignAllLicences(guild) {
   try {
-    await ftpDownload(RANK_FILE, LOCAL_RANK_FILE);
+    await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
   } catch (err) {
     console.log("[ERROR] Could not download rank.json.");
     return;
   }
-  if (!fs.existsSync(LOCAL_RANK_FILE)) return;
+  if (!fs.existsSync(LOCAL_LICENCE_FILE)) return;
 
   const linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE, "utf8"));
-  const data = JSON.parse(fs.readFileSync(LOCAL_RANK_FILE, "utf8"));
+  const data = JSON.parse(fs.readFileSync(LOCAL_LICENCE_FILE, "utf8"));
 
   for (const [steamGuid, discordId] of Object.entries(linked)) {
     const driver = data.find((r) => r.guid === steamGuid);
     if (!driver) continue;
-    const rank = getRank(driver);
-    if (!rank) continue;
+    const licence = getLicence(driver);
+    if (!licence) continue;
     const member = await guild.members.fetch(discordId).catch(() => null);
     if (!member) continue;
-    await member.roles.remove(RANKS.map((r) => r.roleId)).catch(() => {});
-    await member.roles.add(rank.roleId).catch(() => {});
+    await member.roles.remove(LICENCES.map((r) => r.roleId)).catch(() => {});
+    await member.roles.add(licence.roleId).catch(() => {});
   }
 }
 
