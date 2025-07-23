@@ -232,7 +232,7 @@ client.on("messageCreate", async (msg) => {
   if (msg.content.trim().toLowerCase() === "!achelp") {
     try {
       await msg.author.send(
-        `**KMR Moderator Command Help**
+        `**AC Elite Assistant Help**
 
 Here are all the moderator commands you can use in #🛠️・mod-tools:
 
