@@ -228,6 +228,52 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
+  // !achelp - DM moderator help commands
+  if (msg.content.trim().toLowerCase() === "!achelp") {
+    try {
+      await msg.author.send(
+        `**KMR Moderator Command Help**
+
+Here are all the moderator commands you can use in #🛠️・mod-tools:
+
+\`!changetrack [track] <car>\`
+— Change the track and car for the leaderboard. Example: \`!changetrack spa ferrari488\`. (If you only provide the car, it defaults the track to "tatuusfa1".)
+
+\`!assignlicences\`
+— Manually assign licence roles to all currently linked Discord users based on the latest stats.
+
+\`!updateleaderboard\`
+— Post or update the leaderboard embed based on the current settings.
+
+\`!achelp\`
+— Get this list of commands sent to your DM!
+
+*Notes:*
+- Only users with a moderator role can use these commands.
+- Use these commands only in the #🛠️・mod-tools channel.
+- If you need help or something is broken, ask the bot owner.
+
+`
+      );
+      const r = await msg.reply(
+        "📬 I've sent you a DM with all available moderator commands!"
+      );
+      setTimeout(() => {
+        r.delete().catch();
+        msg.delete().catch();
+      }, 8000);
+    } catch (err) {
+      const r = await msg.reply(
+        "❌ I couldn't DM you. Please check your DM privacy settings."
+      );
+      setTimeout(() => {
+        r.delete().catch();
+        msg.delete().catch();
+      }, 8000);
+    }
+    return;
+  }
+
   // !changetrack [track] <car>
   if (msg.content.startsWith("!changetrack")) {
     const args = msg.content.split(/ +/).slice(1);
