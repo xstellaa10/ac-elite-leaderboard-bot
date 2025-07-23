@@ -238,6 +238,7 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
 
 \`!changetrack [track] <car>\`
 — Change the track and car for the leaderboard. Example: \`!changetrack spa ferrari488\`. (If you only provide the car, it defaults the track to "tatuusfa1".)
+- **Tip:** You can find the full, correct track names on the KMR Panel → Tracks: http://157.90.3.32:5283/tracks
 
 \`!assignlicences\`
 — Manually assign licence roles to all currently linked Discord users based on the latest stats.
@@ -252,7 +253,6 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
 - Only users with a moderator role can use these commands.
 - Use these commands only in the #🛠️・mod-tools channel.
 - If you need help or something is broken, ask the bot owner.
-
 `
       );
       const r = await msg.reply(
