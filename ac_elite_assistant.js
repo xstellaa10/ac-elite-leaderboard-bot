@@ -236,37 +236,6 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // !achelp command: send help info via DM
-  if (msg.content.startsWith("!achelp")) {
-    const helpMessage = `
-**AC Elite Assistant Commands:**
-
-• \`!changetrack <track> <car> [track_image_url]\` — Change leaderboard track and car.
-• \`!assignranks\` — Manually assign ranks to all linked members.
-• \`!updateleaderboard\` — Manually update the leaderboard post.
-• \`!achelp\` — Show this help message (sent as DM).
-
-*Note:* Commands only work in the mod-tools channel and require appropriate roles.
-    `;
-    try {
-      await msg.author.send(helpMessage);
-      if (msg.channel.type !== 1) {
-        // if not already a DM
-        await msg.reply("📩 I've sent you a DM with the help information!");
-        // Delete the reply after 15 seconds so mod-tools stays clean
-        setTimeout(() => {
-          msg.delete().catch(() => {});
-        }, 15000);
-      }
-    } catch (err) {
-      // Could not DM user (maybe DMs are blocked)
-      await msg.reply(
-        "⚠️ I couldn't DM you. Please check your privacy settings."
-      );
-    }
-    return;
-  }
-
   // !changetrack <track> <car> [track_image_url]
   if (msg.content.startsWith("!changetrack")) {
     const args = msg.content.split(" ");
@@ -282,8 +251,8 @@ client.on("messageCreate", async (msg) => {
       JSON.stringify(newSettings, null, 2)
     );
     msg.reply(
-      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\`${
-        track_image_url ? `\n**Image:** ${track_image_url}` : ""
+      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\`\n${
+        track_image_url ? `**Image:** ${track_image_url}` : ""
       }`
     );
     console.log(
@@ -331,9 +300,42 @@ client.on("messageCreate", async (msg) => {
     }
     return;
   }
+
+  // !achelp command: send help info via DM
+  if (msg.content.startsWith("!achelp")) {
+    const helpMessage = `
+**AC Elite Assistant Commands:**
+
+• \`!changetrack <track> <car> [track_image_url]\` — Change leaderboard track and car.
+• \`!assignranks\` — Manually assign ranks to all linked members.
+• \`!updateleaderboard\` — Manually update the leaderboard post.
+• \`!achelp\` — Show this help message (sent as DM).
+
+*Note:* Commands only work in the mod-tools channel and require appropriate roles.
+    `;
+    try {
+      await msg.author.send(helpMessage);
+      if (msg.channel.type !== 1) {
+        // if not already a DM
+        const replyMsg = await msg.reply(
+          "📩 I've sent you a DM with the help information!"
+        );
+        // Delete both the command message and reply after 15 seconds
+        setTimeout(() => {
+          replyMsg.delete().catch(() => {});
+          msg.delete().catch(() => {});
+        }, 15000);
+      }
+    } catch (err) {
+      // Could not DM user (maybe DMs are blocked)
+      await msg.reply(
+        "⚠️ I couldn't DM you. Please check your privacy settings."
+      );
+    }
+    return;
+  }
 });
 
-/* === Rank assignment functions === */
 async function assignRankToMember(guild, steamGuid, discordId) {
   try {
     await ftpDownload(RANK_FILE, LOCAL_RANK_FILE);
@@ -415,7 +417,6 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
     .setTitle("AC Elite Server")
     .setColor(0xff0000)
     .setThumbnail(DEFAULT_LEADERBOARD_IMAGE)
-    .setImage(imageUrl)
     .setDescription(description)
     .setFooter({
       text: "Data by AC Elite Leaderboard",
