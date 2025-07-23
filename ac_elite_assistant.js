@@ -152,7 +152,7 @@ client.once("ready", async () => {
     const img = settings.track_image_url?.trim() || DEFAULT_LEADERBOARD_IMAGE;
     await postLeaderboard(settings.track, settings.car, img);
     await log.send(
-      `✅ Auto leaderboard updated for **${settings.track}**/${settings.car}`
+      `✅ Auto leaderboard updated for ${settings.track}/${settings.car}`
     );
     process.exit(0);
   }
@@ -211,7 +211,7 @@ client.on("messageCreate", async (msg) => {
       SETTINGS_FILE,
       JSON.stringify({ track, car, track_image_url: img.join(" ") }, null, 2)
     );
-    const r = await msg.reply(`Settings updated: **${track}**/**${car}**`);
+    const r = await msg.reply(`Settings updated: ${track}/${car}`);
     setTimeout(() => {
       r.delete().catch();
       msg.delete().catch();
@@ -222,13 +222,13 @@ client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!assignlicences")) {
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(
-      `🛠️ Manual assignLicences by <@${
-        msg.author.id
-      }> at ${new Date().toLocaleString()}`
+      `🛠️ Manual assignLicences by ${
+        msg.author.tag
+      } at ${new Date().toLocaleString()}`
     );
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllLicences(guild);
-    await log.send(`✅ Manual assignLicences completed by <@${msg.author.id}>`);
+    await log.send(`✅ Manual assignLicences completed by ${msg.author.tag}`);
     const r = await msg.reply("All linked members have now been licenced!");
     setTimeout(() => {
       r.delete().catch();
@@ -240,9 +240,9 @@ client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!updateleaderboard")) {
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(
-      `🛠️ Manual leaderboard update by <@${
-        msg.author.id
-      }> at ${new Date().toLocaleString()}`
+      `🛠️ Manual leaderboard update by ${
+        msg.author.tag
+      } at ${new Date().toLocaleString()}`
     );
     let settings;
     try {
@@ -260,7 +260,7 @@ client.on("messageCreate", async (msg) => {
     try {
       await postLeaderboard(settings.track, settings.car, imageUrl, msg);
       await log.send(
-        `✅ Manual leaderboard updated by <@${msg.author.id}> for **${settings.track}**/**${settings.car}**`
+        `✅ Manual leaderboard updated by ${msg.author.tag} for ${settings.track}/${settings.car}`
       );
       const r = await msg.reply("Leaderboard updated!");
       setTimeout(() => {
@@ -270,28 +270,6 @@ client.on("messageCreate", async (msg) => {
     } catch (err) {
       console.error(err);
       const r = await msg.reply("Error: " + err.message);
-      setTimeout(() => {
-        r.delete().catch();
-        msg.delete().catch();
-      }, 8000);
-    }
-    return;
-  }
-  // !achelp
-  if (msg.content.startsWith("!achelp")) {
-    try {
-      await msg.author.send(
-        `Commands:\n!changetrack\n!assignlicences\n!updateleaderboard\n!achelp`
-      );
-      if (msg.channel.type !== 1) {
-        const r = await msg.reply("Help sent via DM!");
-        setTimeout(() => {
-          r.delete().catch();
-          msg.delete().catch();
-        }, 8000);
-      }
-    } catch {
-      const r = await msg.reply("Couldn't DM.");
       setTimeout(() => {
         r.delete().catch();
         msg.delete().catch();
@@ -346,7 +324,7 @@ async function assignLicenceToMember(guild, guid, did) {
   await member.roles.add(lic.roleId).catch(() => {});
   const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
   await log.send(
-    `Assigned **${lic.name}** to <@${did}> (score: ${score.toFixed(
+    `Assigned **${lic.name}** to ${member.user.tag} (score: ${score.toFixed(
       2
     )}). Breakdown: ${breakdown}`
   );
@@ -367,9 +345,9 @@ async function assignAllLicences(guild) {
     if (!driver) continue;
     const lic = getLicence(driver);
     if (!lic) continue;
-    const score = calculateScore(driver);
     const member = await guild.members.fetch(did).catch(() => null);
     if (!member) continue;
+    const score = calculateScore(driver);
     await member.roles.remove(LICENCES.map((l) => l.roleId)).catch(() => {});
     await member.roles.add(lic.roleId).catch(() => {});
     const parts = [
@@ -399,9 +377,9 @@ async function assignAllLicences(guild) {
     const breakdown = parts.join(", ");
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(
-      `Auto-assigned **${lic.name}** to <@${did}> (score: ${score.toFixed(
-        2
-      )}). Breakdown: ${breakdown}`
+      `Auto-assigned **${lic.name}** to ${
+        member.user.tag
+      } (score: ${score.toFixed(2)}). Breakdown: ${breakdown}`
     );
   }
 }
@@ -441,6 +419,7 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
     })
     .setTimestamp();
   const webhook = new WebhookClient({ url: process.env.DISCORD_WEBHOOK });
+
   let id = null;
   try {
     const tmp = path.join(__dirname, "__mid.tmp");
@@ -448,6 +427,7 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
     id = fs.readFileSync(tmp, "utf8").trim();
     fs.unlinkSync(tmp);
   } catch {}
+
   if (id) {
     try {
       await webhook.editMessage(id, { embeds: [embed] });
