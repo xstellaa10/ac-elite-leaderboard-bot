@@ -386,12 +386,23 @@ async function assignAllLicences(guild) {
   }
 }
 
-// Leaderboard post
+// Leaderboard post (met auto-swap detect)
 async function postLeaderboard(track, car, imageUrl) {
+  // Download en inlezen
   await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
   const data = JSON.parse(
     fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE))
   );
+
+  // Detect swapped settings.json: als data[track] niet bestaat maar data[car][track] wél,
+  // dan hebben we track en car omgedraaid in de JSON
+  if (!data[track] && data[car] && data[car][track]) {
+    console.warn(
+      `[Leaderboard] Detected swapped track/car in settings. Swapping automatically.`
+    );
+    [track, car] = [car, track];
+  }
+
   const lb = (data[track]?.[car] || []).sort((a, b) => a.laptime - b.laptime);
   let desc = `**Track:** \`${track}\`\n**Car:** \`${car}\`\n\n**Top 10:**\n`;
   const medals = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -405,6 +416,7 @@ async function postLeaderboard(track, car, imageUrl) {
       e.name?.slice(0, 30) || "Unknown"
     }** ${m}\n`;
   });
+
   const embed = new EmbedBuilder()
     .setAuthor({
       name: "🏆 KMR Leaderboard",
@@ -420,6 +432,7 @@ async function postLeaderboard(track, car, imageUrl) {
       iconURL: DEFAULT_LEADERBOARD_IMAGE,
     })
     .setTimestamp();
+
   const webhook = new WebhookClient({ url: process.env.DISCORD_WEBHOOK });
   let id = null;
   try {
