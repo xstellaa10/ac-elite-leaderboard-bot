@@ -164,7 +164,25 @@ client.on(Events.InteractionCreate, async (i) => {
   if (!i.isButton() || i.customId !== "link_steam") return;
   await i.reply({ content: "Check your DM!", ephemeral: true });
   try {
-    await i.user.send("Send your Steam64 ID or profile link.");
+    await i.user.send(
+      `**Welcome to the KMR Steam Account Linking!**
+
+To claim your licence and participate on our servers, please link your Steam account to your Discord account.
+
+**How to do this:**
+1. Open your Steam profile in your web browser (for example: \`https://steamcommunity.com/id/yourname\`).
+2. Copy your Steam **profile link** OR your **Steam64 ID** (a long number starting with 7656119...).
+   - To find your Steam64 ID, you can use a site like https://steamid.io or https://steamidfinder.com — just paste your profile link and copy the number listed as "SteamID64".
+3. Send your Steam64 ID or profile link here in this chat.  
+   _(Example: \`https://steamcommunity.com/profiles/76561198000000000\` or \`76561198000000000\`)_  
+4. Once linked, you will be automatically assigned the correct licence role for your stats!
+
+**⚠️ Please note:**  
+- Each Steam account can only be linked to one Discord account.
+- If you have already linked a Steam ID and need to change it, contact a moderator.
+
+If you need help, just ask here or tag a mod in the server.`
+    );
   } catch {}
 });
 
@@ -178,12 +196,14 @@ client.on("messageCreate", async (m) => {
   if (fs.existsSync(LINKED_USERS_FILE))
     linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE));
   if (linked[guid]) {
-    // Steam ID is al gelinkt, geef weer aan wie
+    // Steam ID is already linked
     if (linked[guid] === m.author.id) {
-      await m.reply(`Deze Steam64 ID is al gelinkt aan jouw account!`);
+      await m.reply(
+        `✅ This Steam64 ID is already linked to your Discord account!\n\nIf you want to update or change your linked Steam account, please contact a moderator.`
+      );
     } else {
       await m.reply(
-        `❌ Deze Steam64 ID is al gelinkt aan een andere gebruiker! Neem contact op met een moderator als dit niet klopt.`
+        `❌ This Steam64 ID is already linked to another Discord user.\n\nIf you believe this is a mistake, or if someone else linked your Steam account, please contact a moderator for help.`
       );
     }
     return;
