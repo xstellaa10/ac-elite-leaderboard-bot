@@ -175,6 +175,13 @@ client.once("ready", async () => {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllLicences(guild);
     console.log("[AUTO] All linked members have now been licenced!");
+
+    const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    const imageUrl =
+      settings.track_image_url?.trim() || DEFAULT_LEADERBOARD_IMAGE;
+    await postLeaderboard(settings.track, settings.car, imageUrl);
+    console.log("[AUTO] Leaderboard has been posted/updated!");
+
     process.exit(0);
   }
 });
