@@ -232,7 +232,13 @@ client.on("messageCreate", async (msg) => {
     msg.member.roles.cache.has(roleId)
   );
   if (!allowed) {
-    msg.reply("You do not have permission to use bot moderator commands.");
+    const replyMsg = await msg.reply(
+      "You do not have permission to use bot moderator commands."
+    );
+    setTimeout(() => {
+      replyMsg.delete().catch(() => {});
+      msg.delete().catch(() => {});
+    }, 8000);
     return;
   }
 
@@ -240,7 +246,13 @@ client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!changetrack")) {
     const args = msg.content.split(" ");
     if (args.length < 3) {
-      msg.reply("Usage: `!changetrack <track> <car> [track_image_url]`");
+      const replyMsg = await msg.reply(
+        "Usage: `!changetrack <track> <car> [track_image_url]`"
+      );
+      setTimeout(() => {
+        replyMsg.delete().catch(() => {});
+        msg.delete().catch(() => {});
+      }, 8000);
       return;
     }
     const [, track, car, ...imageArr] = args;
@@ -250,7 +262,7 @@ client.on("messageCreate", async (msg) => {
       path.join(__dirname, SETTINGS_FILE),
       JSON.stringify(newSettings, null, 2)
     );
-    msg.reply(
+    const replyMsg = await msg.reply(
       `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\`\n${
         track_image_url ? `**Image:** ${track_image_url}` : ""
       }`
@@ -260,6 +272,10 @@ client.on("messageCreate", async (msg) => {
         newSettings
       )}`
     );
+    setTimeout(() => {
+      replyMsg.delete().catch(() => {});
+      msg.delete().catch(() => {});
+    }, 8000);
     return;
   }
 
@@ -267,7 +283,13 @@ client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!assignranks")) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllRanks(guild);
-    msg.reply("All linked members have now been ranked!");
+    const replyMsg = await msg.reply(
+      "All linked members have now been ranked!"
+    );
+    setTimeout(() => {
+      replyMsg.delete().catch(() => {});
+      msg.delete().catch(() => {});
+    }, 8000);
     return;
   }
 
@@ -278,11 +300,23 @@ client.on("messageCreate", async (msg) => {
     try {
       settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
     } catch (e) {
-      msg.reply("No leaderboard settings found. Use !changetrack first.");
+      const replyMsg = await msg.reply(
+        "No leaderboard settings found. Use !changetrack first."
+      );
+      setTimeout(() => {
+        replyMsg.delete().catch(() => {});
+        msg.delete().catch(() => {});
+      }, 8000);
       return;
     }
     if (!settings.track || !settings.car) {
-      msg.reply("Track or car not set. Use !changetrack <track> <car> first.");
+      const replyMsg = await msg.reply(
+        "Track or car not set. Use !changetrack <track> <car> first."
+      );
+      setTimeout(() => {
+        replyMsg.delete().catch(() => {});
+        msg.delete().catch(() => {});
+      }, 8000);
       return;
     }
     // Fallback image
@@ -293,10 +327,20 @@ client.on("messageCreate", async (msg) => {
 
     try {
       await postLeaderboard(settings.track, settings.car, imageUrl, msg);
-      msg.reply("Leaderboard updated!");
+      const replyMsg = await msg.reply("Leaderboard updated!");
+      setTimeout(() => {
+        replyMsg.delete().catch(() => {});
+        msg.delete().catch(() => {});
+      }, 8000);
     } catch (err) {
       console.error("[ERROR] Leaderboard update:", err);
-      msg.reply("Error updating leaderboard: " + (err.message || err));
+      const replyMsg = await msg.reply(
+        "Error updating leaderboard: " + (err.message || err)
+      );
+      setTimeout(() => {
+        replyMsg.delete().catch(() => {});
+        msg.delete().catch(() => {});
+      }, 8000);
     }
     return;
   }
@@ -320,17 +364,21 @@ client.on("messageCreate", async (msg) => {
         const replyMsg = await msg.reply(
           "📩 I've sent you a DM with the help information!"
         );
-        // Delete both the command message and reply after 15 seconds
+        // Delete both the command message and reply after 8 seconds
         setTimeout(() => {
           replyMsg.delete().catch(() => {});
           msg.delete().catch(() => {});
-        }, 15000);
+        }, 8000);
       }
     } catch (err) {
       // Could not DM user (maybe DMs are blocked)
-      await msg.reply(
+      const replyMsg = await msg.reply(
         "⚠️ I couldn't DM you. Please check your privacy settings."
       );
+      setTimeout(() => {
+        replyMsg.delete().catch(() => {});
+        msg.delete().catch(() => {});
+      }, 8000);
     }
     return;
   }
