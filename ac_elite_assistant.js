@@ -9,7 +9,6 @@ const {
   Events,
   WebhookClient,
   EmbedBuilder,
-  PermissionsBitField,
 } = require("discord.js");
 const fs = require("fs");
 const ftp = require("basic-ftp");
@@ -26,14 +25,14 @@ const RANKS = [
 ];
 
 // Channel and role IDs (FILL THESE IN for your server)
-const RANK_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
-const MOD_CHANNEL_ID = "1397236106881400872"; // Channel for mod commands (e.g. #🛠️・mod-tools)
+const RANK_CHANNEL_ID = "1397020407701307545"; // claim button
+const MOD_CHANNEL_ID = "1397236106881400872"; // mod-tools
+const MOD_LOG_CHANNEL_ID = "1397365113794855033"; // mod-tools-logs
 const MOD_ROLE_IDS = [
   "835038837646295071", // Creator
   "835174572125847612", // Admin
   "950564342015873034", // Moderator
 ];
-const MOD_LOG_CHANNEL_ID = "1397365113794855033"; // Channel for mod logs
 
 // FTP & file settings
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
@@ -104,7 +103,7 @@ function getRank(driver) {
   return RANKS.find((rank) => avg >= rank.min) || null;
 }
 
-// On ready: auto-place claim button in the correct channel
+// Auto-place claim button in the correct channel on ready
 client.once("ready", async () => {
   console.log(`✅ AC Elite Assistant online as ${client.user.tag}`);
 
@@ -237,10 +236,11 @@ client.on("messageCreate", async (msg) => {
     msg
       .reply("You do not have permission to use bot moderator commands.")
       .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+    setTimeout(() => msg.delete().catch(() => {}), 10000);
     return;
   }
 
-  // !achelp command: send a DM with all commands
+  // !achelp
   if (msg.content.trim().toLowerCase() === "!achelp") {
     try {
       await msg.author.send(
@@ -258,40 +258,38 @@ client.on("messageCreate", async (msg) => {
         .reply("Couldn't send you a DM — are your DMs open?")
         .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
     }
+    setTimeout(() => msg.delete().catch(() => {}), 10000);
     return;
   }
 
   // !changetrack <track> [car]
   if (msg.content.startsWith("!changetrack")) {
-    const args = msg.content.trim().split(" ");
+    const args = msg.content.split(" ");
     if (args.length < 2) {
       msg
         .reply("Usage: `!changetrack <track> [car]`")
         .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+      setTimeout(() => msg.delete().catch(() => {}), 10000);
       return;
     }
-    const track = args[1];
-    const car = args[2] ? args[2] : "tatuusfa1";
-    const newSettings = { track, car };
+    const [, track, car] = args;
+    const carValue = car ? car : "tatuusfa1";
+    const newSettings = { track, car: carValue };
     fs.writeFileSync(
       path.join(__dirname, SETTINGS_FILE),
       JSON.stringify(newSettings, null, 2)
     );
     msg
       .reply(
-        `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\``
+        `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${carValue}\``
       )
       .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
-
-    // Log in mod-tools-logs
-    try {
-      const logChannel = await client.channels.fetch(MOD_LOG_CHANNEL_ID);
-      if (logChannel && logChannel.isTextBased()) {
-        logChannel.send(
-          `🔧 **${msg.author.tag}** used \`!changetrack\` — Track: \`${track}\`, Car: \`${car}\``
-        );
-      }
-    } catch {}
+    // LOG
+    logModAction(
+      `[MOD] Settings updated by ${msg.author.tag}: ${JSON.stringify(
+        newSettings
+      )}`
+    );
     setTimeout(() => msg.delete().catch(() => {}), 10000);
     return;
   }
@@ -303,13 +301,7 @@ client.on("messageCreate", async (msg) => {
     msg
       .reply("All linked members have now been ranked!")
       .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
-    // Log in mod-tools-logs
-    try {
-      const logChannel = await client.channels.fetch(MOD_LOG_CHANNEL_ID);
-      if (logChannel && logChannel.isTextBased()) {
-        logChannel.send(`🔧 **${msg.author.tag}** used \`!assignranks\``);
-      }
-    } catch {}
+    logModAction(`[MOD] !assignranks executed by ${msg.author.tag}`);
     setTimeout(() => msg.delete().catch(() => {}), 10000);
     return;
   }
@@ -335,22 +327,23 @@ client.on("messageCreate", async (msg) => {
       return;
     }
     try {
-      postLeaderboard(settings.track, settings.car, msg);
-      msg
-        .reply("Leaderboard updated!")
-        .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
-      // Log in mod-tools-logs
-      client.channels
-        .fetch(MOD_LOG_CHANNEL_ID)
-        .then((logChannel) => {
-          if (logChannel && logChannel.isTextBased()) {
-            logChannel.send(
-              `🔧 **${msg.author.tag}** used \`!updateleaderboard\` for \`${settings.track}\` / \`${settings.car}\``
-            );
-          }
+      postLeaderboard(settings.track, settings.car, msg)
+        .then(() => {
+          msg
+            .reply("Leaderboard updated!")
+            .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+          logModAction(
+            `[MOD] !updateleaderboard executed by ${msg.author.tag}`
+          );
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.error("[ERROR] Leaderboard update:", err);
+          msg
+            .reply("Error updating leaderboard: " + (err.message || err))
+            .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
+        });
     } catch (err) {
+      console.error("[ERROR] Leaderboard update:", err);
       msg
         .reply("Error updating leaderboard: " + (err.message || err))
         .then((m) => setTimeout(() => m.delete().catch(() => {}), 10000));
@@ -359,6 +352,16 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 });
+
+/* === Helper to log to mod-logs channel === */
+async function logModAction(message) {
+  try {
+    const logChannel = await client.channels.fetch(MOD_LOG_CHANNEL_ID);
+    if (logChannel && logChannel.isTextBased()) {
+      logChannel.send(`[LOG] ${message}`);
+    }
+  } catch {}
+}
 
 /* === Rank assignment functions === */
 async function assignRankToMember(guild, steamGuid, discordId) {
@@ -476,6 +479,7 @@ async function postLeaderboard(track, car, msg = null) {
   }
   const sent = await webhook.send({ embeds: [embed] });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
+  // Optionally upload new id via ftp
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
   console.log(`✅ Posted new leaderboard message ${sent.id}`);
 }
