@@ -18,16 +18,16 @@ const path = require("path");
 
 // Rank structure (adjust as needed)
 const RANKS = [
-  { name: "Platinum Licence", min: 700, roleId: "1397007839456657478" },
-  { name: "Gold Licence", min: 500, roleId: "1396647621187076248" },
-  { name: "Silver Licence", min: 200, roleId: "1396647665172742164" },
+  { name: "Platinum Licence", min: 1000, roleId: "1397007839456657478" },
+  { name: "Gold Licence", min: 700, roleId: "1396647621187076248" },
+  { name: "Silver Licence", min: 300, roleId: "1396647665172742164" },
   { name: "Bronze Licence", min: 0, roleId: "1396647702766420061" },
 ];
 
 // Channel and role IDs (FILL THESE IN for your server)
 const RANK_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
 const MOD_CHANNEL_ID = "1397236106881400872"; // Channel for mod commands (e.g. #🛠️・mod-tools)
-const MOD_LOG_CHANNEL_ID = "1397365113794855033"; // Channel for logs
+const MOD_LOG_CHANNEL_ID = "1397365113794855033"; // Channel for mod command logs
 const MOD_ROLE_IDS = [
   "835038837646295071", // Creator
   "835174572125847612", // Admin
@@ -88,19 +88,44 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-// Helper: average calculation
-function getAverage(driver) {
-  const points = typeof driver.points === "number" ? driver.points : 0;
-  const wins = typeof driver.wins === "number" ? driver.wins : 0;
-  const kilometers =
-    typeof driver.kilometers === "number" ? driver.kilometers : 0;
-  return (points + wins + kilometers) / 3;
+// === SCORING FORMULA (update here to tweak weighting) ===
+function calculateScore(driver) {
+  // Defaults for undefined values:
+  const points = Number(driver.points) || 0;
+  const wins = Number(driver.wins) || 0;
+  const podiums = Number(driver.podiums) || 0;
+  const poles = Number(driver.poles) || 0;
+  const flaps =
+    Number(driver.flaps || driver.fastestlaps || driver.fastest_laps) || 0;
+  const kilometers = Number(driver.kilometers) || 0;
+  const infractions = Number(driver.infr || driver.infractions) || 0;
+  const crashes = Number(driver.collisions || driver.crashes) || 0;
+
+  // Derived stats:
+  const infractionsPer100km =
+    kilometers > 0 ? infractions / (kilometers / 100) : 0;
+  const crashesPer100km = kilometers > 0 ? crashes / (kilometers / 100) : 0;
+
+  // Weighted scoring formula (feel free to tweak!)
+  return (
+    points +
+    wins * 10 +
+    podiums * 6 +
+    poles * 8 +
+    flaps * 8 +
+    kilometers * 0.1 -
+    infractionsPer100km * 5 -
+    crashesPer100km * 10 -
+    infractions * 0.2 -
+    crashes * 0.5
+  );
 }
 
 // Helper: determine rank
 function getRank(driver) {
-  const avg = getAverage(driver);
-  return RANKS.find((rank) => avg >= rank.min) || null;
+  const score = calculateScore(driver);
+  const found = RANKS.find((rank) => score >= rank.min);
+  return found ? { ...found, score } : null;
 }
 
 // On ready: auto-place claim button in the correct channel
@@ -245,7 +270,7 @@ client.on("messageCreate", async (msg) => {
       return;
     }
     const [, track, carArg] = args;
-    const car = carArg ? carArg : "tatuusfa1";
+    const car = carArg || "tatuusfa1";
     const newSettings = { track, car };
     fs.writeFileSync(
       path.join(__dirname, SETTINGS_FILE),
@@ -254,9 +279,13 @@ client.on("messageCreate", async (msg) => {
     msg.reply(
       `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\``
     );
-    await logModAction(
-      `Leaderboard settings updated by ${msg.author.tag}:\n**Track:** \`${track}\`\n**Car:** \`${car}\``
+    logModAction(
+      msg,
+      `[MOD] Settings updated by ${msg.author.tag}: ${JSON.stringify(
+        newSettings
+      )}`
     );
+    setTimeout(() => msg.delete().catch(() => {}), 7000);
     return;
   }
 
@@ -264,8 +293,11 @@ client.on("messageCreate", async (msg) => {
   if (msg.content.startsWith("!assignranks")) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllRanks(guild);
-    msg.reply("All linked members have now been ranked!");
-    await logModAction(`Ranks updated manually by ${msg.author.tag}.`);
+    msg
+      .reply("All linked members have now been ranked!")
+      .then((m) => setTimeout(() => m.delete().catch(() => {}), 7000));
+    setTimeout(() => msg.delete().catch(() => {}), 7000);
+    logModAction(msg, `[MOD] !assignranks used by ${msg.author.tag}`);
     return;
   }
 
@@ -275,64 +307,64 @@ client.on("messageCreate", async (msg) => {
     try {
       settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
     } catch (e) {
-      msg.reply("No leaderboard settings found. Use !changetrack first.");
+      msg
+        .reply("No leaderboard settings found. Use !changetrack first.")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 7000));
+      setTimeout(() => msg.delete().catch(() => {}), 7000);
       return;
     }
     if (!settings.track || !settings.car) {
-      msg.reply("Track or car not set. Use !changetrack <track> [car] first.");
+      msg
+        .reply("Track or car not set. Use !changetrack <track> [car] first.")
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 7000));
+      setTimeout(() => msg.delete().catch(() => {}), 7000);
       return;
     }
-    try {
-      await postLeaderboard(settings.track, settings.car, msg);
-      msg.reply("Leaderboard updated!");
-      await logModAction(
-        `Leaderboard updated manually by ${msg.author.tag} (Track: ${settings.track}, Car: ${settings.car})`
-      );
-    } catch (err) {
-      console.error("[ERROR] Leaderboard update:", err);
-      msg.reply("Error updating leaderboard: " + (err.message || err));
-    }
+
+    postLeaderboard(settings.track, settings.car, msg)
+      .then(() => {
+        msg
+          .reply("Leaderboard updated!")
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 7000));
+        setTimeout(() => msg.delete().catch(() => {}), 7000);
+        logModAction(msg, `[MOD] !updateleaderboard used by ${msg.author.tag}`);
+      })
+      .catch((err) => {
+        msg
+          .reply("Error updating leaderboard: " + (err.message || err))
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 7000));
+        setTimeout(() => msg.delete().catch(() => {}), 7000);
+        console.error("[ERROR] Leaderboard update:", err);
+      });
     return;
   }
 
-  // !achelp (mod help)
-  if (msg.content.startsWith("!achelp")) {
-    const helpMsg = `**AC Elite Assistant — Moderator Commands**
-
-\`!changetrack <track> [car]\`
-→ Set the current track (and optionally car, default: tatuusfa1) for the leaderboard.
-
-\`!assignranks\`
-→ Update all licence roles for linked users (fetches latest data from FTP).
-
-\`!updateleaderboard\`
-→ Immediately update the leaderboard Discord message.
-
-\`!achelp\`
-→ Show this help message.
-
-> **All commands auto-delete after 15 seconds. Logs are kept in <#${MOD_LOG_CHANNEL_ID}>.**
-`;
+  // !achelp
+  if (msg.content.trim() === "!achelp") {
     msg
-      .reply(helpMsg)
-      .then((m) => setTimeout(() => m.delete().catch(() => {}), 15000));
+      .reply(
+        "**AC Elite Assistant Moderator Commands:**\n" +
+          "• `!changetrack <track> [car]` — Change the leaderboard to a different track and car (default car: tatuusfa1)\n" +
+          "• `!updateleaderboard` — Manually update leaderboard post (after changetrack or if you want to refresh)\n" +
+          "• `!assignranks` — Manually update all Discord roles/licenses for all linked users\n" +
+          "All moderator commands will be removed automatically for a clean channel. Full logs appear in <#1397365113794855033>."
+      )
+      .then((m) => setTimeout(() => m.delete().catch(() => {}), 25000));
+    setTimeout(() => msg.delete().catch(() => {}), 7000);
     return;
   }
-
-  // Auto-delete mod command message after 15 seconds
-  setTimeout(() => {
-    msg.delete().catch(() => {});
-  }, 15000);
 });
 
-// Logging to mod-tools-logs
-async function logModAction(content) {
+// Logging helper for mod actions
+async function logModAction(msg, text) {
   try {
-    const channel = await client.channels.fetch(MOD_LOG_CHANNEL_ID);
-    if (channel && channel.isTextBased()) {
-      channel.send(content).catch(() => {});
+    const logChannel = await msg.guild.channels.fetch(MOD_LOG_CHANNEL_ID);
+    if (logChannel) {
+      await logChannel.send(`[LOG] ${text}`);
     }
-  } catch {}
+  } catch (e) {
+    console.log("[LOG] Could not send to mod-tools-logs channel.");
+  }
 }
 
 /* === Rank assignment functions === */
@@ -356,6 +388,25 @@ async function assignRankToMember(guild, steamGuid, discordId) {
 
   await member.roles.remove(RANKS.map((r) => r.roleId)).catch(() => {});
   await member.roles.add(rank.roleId).catch(() => {});
+
+  // Log to console (for stats fine-tuning!)
+  console.log(
+    `[RESULT] ${driver.name} (${steamGuid}) | points=${driver.points}, wins=${
+      driver.wins
+    }, podiums=${driver.podiums}, poles=${driver.poles}, flaps=${
+      driver.flaps
+    }, km=${driver.kilometers}, infr=${driver.infr}, crashes=${
+      driver.collisions
+    }, infr/100km=${
+      driver.kilometers > 0
+        ? (driver.infr / (driver.kilometers / 100)).toFixed(2)
+        : "0"
+    }, cr/100km=${
+      driver.kilometers > 0
+        ? (driver.collisions / (driver.kilometers / 100)).toFixed(2)
+        : "0"
+    }, avg=${rank.score} => ${rank.name}`
+  );
 }
 
 async function assignAllRanks(guild) {
@@ -379,18 +430,30 @@ async function assignAllRanks(guild) {
     if (!member) continue;
     await member.roles.remove(RANKS.map((r) => r.roleId)).catch(() => {});
     await member.roles.add(rank.roleId).catch(() => {});
-    // Extended logging:
+
+    // Log for each driver
     console.log(
-      `[RESULT] ${driver.name} (${discordId}) | points=${driver.points}, wins=${
+      `[RESULT] ${driver.name} (${steamGuid}) | points=${driver.points}, wins=${
         driver.wins
-      }, km=${driver.kilometers}, avg=${getAverage(driver)} => ${rank.name}`
+      }, podiums=${driver.podiums}, poles=${driver.poles}, flaps=${
+        driver.flaps
+      }, km=${driver.kilometers}, infr=${driver.infr}, crashes=${
+        driver.collisions
+      }, infr/100km=${
+        driver.kilometers > 0
+          ? (driver.infr / (driver.kilometers / 100)).toFixed(2)
+          : "0"
+      }, cr/100km=${
+        driver.kilometers > 0
+          ? (driver.collisions / (driver.kilometers / 100)).toFixed(2)
+          : "0"
+      }, avg=${rank.score} => ${rank.name}`
     );
   }
 }
 
 /* === Leaderboard post function === */
 async function postLeaderboard(track, car, msg = null) {
-  // Download leaderboard.json from FTP
   await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
   const raw = fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE), "utf8");
   const data = JSON.parse(raw);
@@ -457,6 +520,7 @@ async function postLeaderboard(track, car, msg = null) {
   }
   const sent = await webhook.send({ embeds: [embed] });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
+  // Optionally upload new id via ftp
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
   console.log(`✅ Posted new leaderboard message ${sent.id}`);
 }
