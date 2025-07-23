@@ -25,8 +25,9 @@ const LICENCES = [
 ];
 
 // Channel and role IDs (FILL THESE IN for your server)
-const LICENCE_CHANNEL_ID = "1397020407701307545"; // Channel for claim button (e.g. #🪪claim-licence)
-const MOD_CHANNEL_ID = "1397236106881400872"; // Channel for mod commands (e.g. #🛠️・mod-tools)
+const LICENCE_CHANNEL_ID = "1397020407701307545"; // #🪪claim-licence
+const MOD_CHANNEL_ID = "1397236106881400872"; // #🛠️・mod-tools
+const MOD_TOOLS_LOGS_CHANNEL_ID = "1397365113794855033"; // #mod-tools-logs
 const MOD_ROLE_IDS = [
   "835038837646295071", // Creator
   "835174572125847612", // Admin
@@ -36,7 +37,7 @@ const MOD_ROLE_IDS = [
 // FTP & file settings
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
 const LINKED_USERS_FILE = "linked_users.json";
-const LICENCE_FILE = "rank.json"; // blijf zo heten want FTP bestand zo heet
+const LICENCE_FILE = "rank.json"; // FTP bestand
 const LOCAL_LICENCE_FILE = path.join(__dirname, LICENCE_FILE);
 const SETTINGS_FILE = "leaderboard_settings.json";
 const LEADERBOARD_FILE = "leaderboard.json";
@@ -89,11 +90,6 @@ const client = new Client({
 
 /* === SCORE FORMULA: bereken de score voor licentie === */
 function calculateScore(driver) {
-  // Weegfactoren, pas aan naar wens:
-  // Money telt relatief laag mee, poles en fastest laps zwaar,
-  // veel infractions en crashes per 100km telt negatief mee
-
-  // Check alle properties bestaan en default naar 0
   const money = typeof driver.points === "number" ? driver.points : 0;
   const wins = typeof driver.wins === "number" ? driver.wins : 0;
   const podiums = typeof driver.podiums === "number" ? driver.podiums : 0;
@@ -108,9 +104,8 @@ function calculateScore(driver) {
   const crashesPer100km =
     typeof driver.cr_per_100km === "number" ? driver.cr_per_100km : 0;
 
-  // Score berekening met gewichten:
-  const score =
-    money * 0.5 + // relatief laag
+  return (
+    money * 0.5 +
     wins * 10 +
     podiums * 8 +
     poles * 15 +
@@ -119,9 +114,8 @@ function calculateScore(driver) {
     infractions * 2 -
     crashes * 3 -
     infrPer100km * 20 -
-    crashesPer100km * 25;
-
-  return score;
+    crashesPer100km * 25
+  );
 }
 
 function getLicence(driver) {
@@ -133,54 +127,51 @@ function getLicence(driver) {
 client.once("ready", async () => {
   console.log(`✅ AC Elite Assistant online as ${client.user.tag}`);
 
+  // Ensure claim button exists
   try {
     const channel = await client.channels.fetch(LICENCE_CHANNEL_ID);
-    if (!channel) {
-      console.log("[ERROR] Claim channel not found!");
-    } else {
+    if (channel) {
       const messages = await channel.messages.fetch({ limit: 50 });
       const alreadySent = messages.find(
         (m) =>
           m.author.id === client.user.id &&
-          m.content.includes("Do you want to link your Steam account")
+          m.content.includes("link your Steam account")
       );
       if (!alreadySent) {
         const button = new ButtonBuilder()
           .setCustomId("link_steam")
           .setLabel("Link Steam")
           .setStyle(ButtonStyle.Primary);
-
         const row = new ActionRowBuilder().addComponents(button);
-
         await channel.send({
           content:
-            "Do you want to link your Steam account to Discord? Click the button below.\n\nAfter linking, you will automatically receive a licence role based on your stats!",
+            "Do you want to link your Steam account to Discord? Click below.",
           components: [row],
         });
-        console.log(
-          `[INFO] Claim message sent in #${channel.name} (${channel.id})`
-        );
-      } else {
-        console.log(
-          `[INFO] Claim message already exists in #${channel.name} (${channel.id})`
-        );
+        console.log(`[INFO] Claim message sent in #${channel.name}`);
       }
     }
   } catch (err) {
-    console.log("[ERROR] Error while auto-placing button:", err);
+    console.error("[ERROR] While auto-placing button:", err);
   }
 
-  // AUTO MODE for cron (every 15 min) to update licences
+  // AUTO MODE for cron (every 15/30 min) to update licences & leaderboard
   if (process.argv[2] === "auto") {
+    const logChan = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
+    await logChan.send(`🚀 Auto run started at ${new Date().toLocaleString()}`);
+
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllLicences(guild);
-    console.log("[AUTO] All linked members have now been licenced!");
+    await logChan.send("[AUTO] All linked members have now been licenced!");
 
+    // Leaderboard
     const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
     const imageUrl =
       settings.track_image_url?.trim() || DEFAULT_LEADERBOARD_IMAGE;
     await postLeaderboard(settings.track, settings.car, imageUrl);
-    console.log("[AUTO] Leaderboard has been posted/updated!");
+    await logChan.send(
+      `✅ Leaderboard updated for track **${settings.track}** and car **${settings.car}**.`
+    );
 
     process.exit(0);
   }
@@ -188,42 +179,30 @@ client.once("ready", async () => {
 
 /* === Claim Button click: Send DM for linking === */
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isButton()) return;
-  if (interaction.customId !== "link_steam") return;
-
-  await interaction.reply({
-    content: "Check your DM! ✉️",
-    ephemeral: true,
-  });
-
-  // Send DM
+  if (!interaction.isButton() || interaction.customId !== "link_steam") return;
+  await interaction.reply({ content: "Check your DM! ✉️", ephemeral: true });
   try {
     await interaction.user.send(
-      "Hi! Please send your **Steam profile link** or **Steam64 ID** (GUID) to link your Discord account.\n" +
-        "Example:\n`76561198000000000` or `https://steamcommunity.com/profiles/76561198000000000`"
+      "Hi! Please send your **Steam profile link** or **Steam64 ID** (GUID) to link your Discord account."
     );
-    console.log(`[INFO] DM sent to ${interaction.user.tag} for linking`);
+    console.log(`[INFO] DM sent to ${interaction.user.tag}`);
   } catch (err) {
     await interaction.followUp({
-      content:
-        "Could not send you a DM! Please enable DMs or contact an admin.",
+      content: "Could not send DM. Enable DMs or contact admin.",
       ephemeral: true,
     });
-    console.log(`[ERROR] Could not DM ${interaction.user.tag}:`, err);
+    console.error(`[ERROR] DM to ${interaction.user.tag}:`, err);
   }
 });
 
 /* === Process DMs: Link and assign licence === */
 client.on("messageCreate", async (msg) => {
-  // Only react to DMs not sent by the bot itself
   if (msg.channel.type !== 1 || msg.author.bot) return;
-
   const match = msg.content.match(/(7656119\d{10,12})/);
   if (!match) {
-    await msg.reply(
-      "Invalid Steam64 ID. Please only send your 17-digit Steam64 ID or full Steam profile link."
+    return msg.reply(
+      "Invalid Steam64 ID. Send your 17-digit GUID or full profile link."
     );
-    return;
   }
   const steamGuid = match[1];
 
@@ -231,186 +210,124 @@ client.on("messageCreate", async (msg) => {
   if (fs.existsSync(LINKED_USERS_FILE)) {
     linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE, "utf8"));
   }
-
-  // Already linked?
-  const alreadyLinked = Object.values(linked).includes(msg.author.id);
-  if (
-    alreadyLinked &&
-    Object.entries(linked).find(
-      ([guid, did]) => did === msg.author.id && guid === steamGuid
-    )
-  ) {
-    await msg.reply(
-      `Your Steam GUID \`${steamGuid}\` is already linked to your Discord account.`
-    );
-    return;
+  const already = Object.values(linked).includes(msg.author.id);
+  if (already && linked[steamGuid] === msg.author.id) {
+    return msg.reply(`GUID \`${steamGuid}\` already linked.`);
   }
 
-  // Save new or changed link
   linked[steamGuid] = msg.author.id;
   fs.writeFileSync(LINKED_USERS_FILE, JSON.stringify(linked, null, 2));
-  await msg.reply(
-    `Success! Your Steam GUID \`${steamGuid}\` is now linked to your Discord account. You will automatically get your correct role!`
-  );
+  await msg.reply(`Success! GUID \`${steamGuid}\` linked. Assigning role now.`);
   const guild = await client.guilds.fetch(process.env.GUILD_ID);
   await assignLicenceToMember(guild, steamGuid, msg.author.id);
 });
 
 /* === MOD/ADMIN COMMANDS: in mod-tools channel only === */
 client.on("messageCreate", async (msg) => {
-  if (msg.author.bot) return;
-  if (msg.channel.id !== MOD_CHANNEL_ID) return;
-
-  // Check: user has one of the allowed roles
-  const allowed = MOD_ROLE_IDS.some((roleId) =>
-    msg.member.roles.cache.has(roleId)
-  );
+  if (msg.author.bot || msg.channel.id !== MOD_CHANNEL_ID) return;
+  const allowed = MOD_ROLE_IDS.some((r) => msg.member.roles.cache.has(r));
   if (!allowed) {
-    const replyMsg = await msg.reply(
-      "You do not have permission to use bot moderator commands."
-    );
+    const r = await msg.reply("You do not have permission.");
     setTimeout(() => {
-      replyMsg.delete().catch(() => {});
+      r.delete().catch(() => {});
       msg.delete().catch(() => {});
     }, 8000);
     return;
   }
 
-  // !changetrack <track> <car> [track_image_url]
+  // !changetrack
   if (msg.content.startsWith("!changetrack")) {
-    const args = msg.content.split(" ");
-    if (args.length < 3) {
-      const replyMsg = await msg.reply(
-        "Usage: `!changetrack <track> <car> [track_image_url]`"
+    const parts = msg.content.split(/ +/).slice(1);
+    if (parts.length < 2) {
+      const r = await msg.reply(
+        "Usage: `!changetrack <track> <car> [image_url]`"
       );
       setTimeout(() => {
-        replyMsg.delete().catch(() => {});
+        r.delete().catch(() => {});
         msg.delete().catch(() => {});
       }, 8000);
       return;
     }
-    const [, track, car, ...imageArr] = args;
-    const track_image_url = imageArr.join(" ");
-    const newSettings = { track, car, track_image_url };
-    fs.writeFileSync(
-      path.join(__dirname, SETTINGS_FILE),
-      JSON.stringify(newSettings, null, 2)
-    );
-    const replyMsg = await msg.reply(
-      `✅ Leaderboard settings updated!\n**Track:** \`${track}\`\n**Car:** \`${car}\`\n${
-        track_image_url ? `**Image:** ${track_image_url}` : ""
-      }`
-    );
-    console.log(
-      `[MOD] Settings updated by ${msg.author.tag}: ${JSON.stringify(
-        newSettings
-      )}`
+    const [track, car, ...img] = parts;
+    const newSet = { track, car, track_image_url: img.join(" ") };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(newSet, null, 2));
+    const r = await msg.reply(
+      `✅ Leaderboard settings updated! Track: \`${track}\`, Car: \`${car}\``
     );
     setTimeout(() => {
-      replyMsg.delete().catch(() => {});
+      r.delete().catch(() => {});
       msg.delete().catch(() => {});
     }, 8000);
     return;
   }
 
-  // !assignlicences (manual assign)
+  // !assignlicences
   if (msg.content.startsWith("!assignlicences")) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     await assignAllLicences(guild);
-    const replyMsg = await msg.reply(
-      "All linked members have now been licenced!"
-    );
+    const r = await msg.reply("All linked members have now been licenced!");
     setTimeout(() => {
-      replyMsg.delete().catch(() => {});
+      r.delete().catch(() => {});
       msg.delete().catch(() => {});
     }, 8000);
     return;
   }
 
-  // !updateleaderboard (manual leaderboard post)
+  // !updateleaderboard
   if (msg.content.startsWith("!updateleaderboard")) {
-    // Read the settings
     let settings;
     try {
       settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
-    } catch (e) {
-      const replyMsg = await msg.reply(
-        "No leaderboard settings found. Use !changetrack first."
+    } catch {
+      const r = await msg.reply(
+        "No leaderboard settings. Use !changetrack first."
       );
       setTimeout(() => {
-        replyMsg.delete().catch(() => {});
+        r.delete().catch(() => {});
         msg.delete().catch(() => {});
       }, 8000);
       return;
     }
-    if (!settings.track || !settings.car) {
-      const replyMsg = await msg.reply(
-        "Track or car not set. Use !changetrack <track> <car> first."
-      );
-      setTimeout(() => {
-        replyMsg.delete().catch(() => {});
-        msg.delete().catch(() => {});
-      }, 8000);
-      return;
-    }
-    // Fallback image
     const imageUrl =
-      settings.track_image_url && settings.track_image_url.trim().length > 0
-        ? settings.track_image_url
-        : DEFAULT_LEADERBOARD_IMAGE;
-
+      settings.track_image_url?.trim() || DEFAULT_LEADERBOARD_IMAGE;
     try {
       await postLeaderboard(settings.track, settings.car, imageUrl, msg);
-      const replyMsg = await msg.reply("Leaderboard updated!");
+      const r = await msg.reply("Leaderboard updated!");
       setTimeout(() => {
-        replyMsg.delete().catch(() => {});
+        r.delete().catch(() => {});
         msg.delete().catch(() => {});
       }, 8000);
     } catch (err) {
       console.error("[ERROR] Leaderboard update:", err);
-      const replyMsg = await msg.reply(
-        "Error updating leaderboard: " + (err.message || err)
-      );
+      const r = await msg.reply("Error updating leaderboard: " + err.message);
       setTimeout(() => {
-        replyMsg.delete().catch(() => {});
+        r.delete().catch(() => {});
         msg.delete().catch(() => {});
       }, 8000);
     }
     return;
   }
 
-  // !achelp command: send help info via DM
+  // !achelp
   if (msg.content.startsWith("!achelp")) {
-    const helpMessage = `
-**AC Elite Assistant Commands:**
-
-• \`!changetrack <track> <car> [track_image_url]\` — Change leaderboard track and car.
-• \`!assignlicences\` — Manually assign licences to all linked members.
-• \`!updateleaderboard\` — Manually update the leaderboard post.
-• \`!achelp\` — Show this help message (sent as DM).
-
-*Note:* Commands only work in the mod-tools channel and require appropriate roles.
-    `;
+    const help = `**AC Elite Assistant Commands:**
+• \`!changetrack <track> <car> [image_url]\`
+• \`!assignlicences\`
+• \`!updateleaderboard\`
+• \`!achelp\``;
     try {
-      await msg.author.send(helpMessage);
+      await msg.author.send(help);
       if (msg.channel.type !== 1) {
-        // if not already a DM
-        const replyMsg = await msg.reply(
-          "📩 I've sent you a DM with the help information!"
-        );
-        // Delete both the command message and reply after 8 seconds
+        const r = await msg.reply("📩 Help sent via DM!");
         setTimeout(() => {
-          replyMsg.delete().catch(() => {});
+          r.delete().catch(() => {});
           msg.delete().catch(() => {});
         }, 8000);
       }
-    } catch (err) {
-      // Could not DM user (maybe DMs are blocked)
-      const replyMsg = await msg.reply(
-        "⚠️ I couldn't DM you. Please check your privacy settings."
-      );
+    } catch {
+      const r = await msg.reply("⚠️ Couldn't send DM. Check privacy settings.");
       setTimeout(() => {
-        replyMsg.delete().catch(() => {});
+        r.delete().catch(() => {});
         msg.delete().catch(() => {});
       }, 8000);
     }
@@ -418,33 +335,69 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
+// Assign a single member and log breakdown
 async function assignLicenceToMember(guild, steamGuid, discordId) {
   try {
     await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
-  } catch (err) {
-    console.log("[ERROR] Could not download rank.json.");
+  } catch {
     return;
   }
   if (!fs.existsSync(LOCAL_LICENCE_FILE)) return;
   const data = JSON.parse(fs.readFileSync(LOCAL_LICENCE_FILE, "utf8"));
   const driver = data.find((r) => r.guid === steamGuid);
   if (!driver) return;
-
   const licence = getLicence(driver);
   if (!licence) return;
 
+  // Destructure for breakdown
+  const {
+    points: money = 0,
+    wins = 0,
+    podiums = 0,
+    poles = 0,
+    flaps: fastestLaps = 0,
+    kilometers = 0,
+    infr: infractions = 0,
+    crashes = 0,
+    infr_per_100km: infrPer100km = 0,
+    cr_per_100km: crashesPer100km = 0,
+  } = driver;
+  const score = calculateScore(driver);
+  const breakdown = [
+    `money:${money}*0.5=${(money * 0.5).toFixed(2)}`,
+    `wins:${wins}*10=${(wins * 10).toFixed(2)}`,
+    `podiums:${podiums}*8=${(podiums * 8).toFixed(2)}`,
+    `poles:${poles}*15=${(poles * 15).toFixed(2)}`,
+    `fastestLaps:${fastestLaps}*12=${(fastestLaps * 12).toFixed(2)}`,
+    `kilometers:${kilometers}*0.2=${(kilometers * 0.2).toFixed(2)}`,
+    `infractions:-${infractions}*2=${(-infractions * 2).toFixed(2)}`,
+    `crashes:-${crashes}*3=${(-crashes * 3).toFixed(2)}`,
+    `infrPer100km:-${infrPer100km}*20=${(-infrPer100km * 20).toFixed(2)}`,
+    `crashesPer100km:-${crashesPer100km}*25=${(-crashesPer100km * 25).toFixed(
+      2
+    )}`,
+  ].join(", ");
+
   const member = await guild.members.fetch(discordId).catch(() => null);
   if (!member) return;
-
   await member.roles.remove(LICENCES.map((r) => r.roleId)).catch(() => {});
   await member.roles.add(licence.roleId).catch(() => {});
+
+  // Send log to mod-tools-logs
+  const logChan = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
+  await logChan.send(
+    `Assigned **${licence.name}** to <@${discordId}> (score: ${score.toFixed(
+      2
+    )}). Breakdown: ${breakdown}`
+  );
 }
 
+// Assign all linked members and log each
 async function assignAllLicences(guild) {
   try {
     await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
-  } catch (err) {
-    console.log("[ERROR] Could not download rank.json.");
+  } catch {
+    console.error("[ERROR] Could not download rank.json.");
     return;
   }
   if (!fs.existsSync(LOCAL_LICENCE_FILE)) return;
@@ -457,43 +410,77 @@ async function assignAllLicences(guild) {
     if (!driver) continue;
     const licence = getLicence(driver);
     if (!licence) continue;
+
+    // compute breakdown
+    const {
+      points: money = 0,
+      wins = 0,
+      podiums = 0,
+      poles = 0,
+      flaps: fastestLaps = 0,
+      kilometers = 0,
+      infr: infractions = 0,
+      crashes = 0,
+      infr_per_100km: infrPer100km = 0,
+      cr_per_100km: crashesPer100km = 0,
+    } = driver;
+    const score = calculateScore(driver);
+    const breakdown = [
+      `money:${money}*0.5=${(money * 0.5).toFixed(2)}`,
+      `wins:${wins}*10=${(wins * 10).toFixed(2)}`,
+      `podiums:${podiums}*8=${(podiums * 8).toFixed(2)}`,
+      `poles:${poles}*15=${(poles * 15).toFixed(2)}`,
+      `fastestLaps:${fastestLaps}*12=${(fastestLaps * 12).toFixed(2)}`,
+      `kilometers:${kilometers}*0.2=${(kilometers * 0.2).toFixed(2)}`,
+      `infractions:-${infractions}*2=${(-infractions * 2).toFixed(2)}`,
+      `crashes:-${crashes}*3=${(-crashes * 3).toFixed(2)}`,
+      `infrPer100km:-${infrPer100km}*20=${(-infrPer100km * 20).toFixed(2)}`,
+      `crashesPer100km:-${crashesPer100km}*25=${(-crashesPer100km * 25).toFixed(
+        2
+      )}`,
+    ].join(", ");
+
     const member = await guild.members.fetch(discordId).catch(() => null);
     if (!member) continue;
     await member.roles.remove(LICENCES.map((r) => r.roleId)).catch(() => {});
     await member.roles.add(licence.roleId).catch(() => {});
+
+    // log each assignment
+    const logChan = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
+    await logChan.send(
+      `Auto-assigned **${
+        licence.name
+      }** to <@${discordId}> (score: ${score.toFixed(
+        2
+      )}). Breakdown: ${breakdown}`
+    );
   }
 }
 
 /* === Leaderboard post function === */
 async function postLeaderboard(track, car, imageUrl, msg = null) {
-  // Download leaderboard.json from FTP
   await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
   const raw = fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE), "utf8");
   const data = JSON.parse(raw);
   const lb = data[track]?.[car] || [];
-
   lb.sort((a, b) => a.laptime - b.laptime);
+
   const medals = { 1: "🥇", 2: "🥈", 3: "🥉" };
-
-  let description =
-    `**Track:** \`${track}\`\n` + `**Car:** \`${car}\`\n\n` + `**Top 10:**\n`;
-
-  lb.slice(0, 10).forEach((entry, idx) => {
-    const place = idx + 1;
-    const medal = medals[place] || "";
-    const name = entry.name?.slice(0, 30) || "Unknown";
-    const laptime = entry.laptime || 0;
-    const min = Math.floor(laptime / 1000 / 60);
-    const sec = ((laptime / 1000) % 60).toFixed(3).padStart(6, "0");
-    description += `${place}. \`${min}:${sec}\` — **${name}**${
-      medal ? " " + medal : ""
-    }\n`;
+  let description = `**Track:** \`${track}\`\n**Car:** \`${car}\`\n\n**Top 10:**\n`;
+  lb.slice(0, 10).forEach((e, i) => {
+    const place = i + 1;
+    const m = medals[place] || "";
+    const name = e.name?.slice(0, 30) || "Unknown";
+    const ms = e.laptime || 0;
+    const min = Math.floor(ms / 1000 / 60);
+    const sec = ((ms / 1000) % 60).toFixed(3).padStart(6, "0");
+    description += `${place}. \`${min}:${sec}\` — **${name}** ${m}\n`;
   });
 
   const embed = new EmbedBuilder()
     .setAuthor({
       name: "🏆 KMR Leaderboard",
-      url: "https://acstuff.ru/s/q:race/online/join?httpPort=18283&ip=157.90.3.32",
+      url: "https://acstuff.ru/",
       iconURL: DEFAULT_LEADERBOARD_IMAGE,
     })
     .setTitle("AC Elite Server")
@@ -506,34 +493,28 @@ async function postLeaderboard(track, car, imageUrl, msg = null) {
     })
     .setTimestamp();
 
-  // Get webhook from env
-  const webhookUrl = process.env.DISCORD_WEBHOOK;
-  const webhook = new WebhookClient({ url: webhookUrl });
+  const webhook = new WebhookClient({ url: process.env.DISCORD_WEBHOOK });
 
-  // Get or create message id file
+  // Manage existing message via FTP-stored ID
   let savedId = null;
   try {
-    const tmp = path.join(__dirname, "__mid.tmp");
-    await ftpDownload(MESSAGE_ID_FILE, tmp);
-    savedId = fs.readFileSync(tmp, "utf8").trim();
-    fs.unlinkSync(tmp);
+    const tmpIdFile = path.join(__dirname, "__mid.tmp");
+    await ftpDownload(MESSAGE_ID_FILE, tmpIdFile);
+    savedId = fs.readFileSync(tmpIdFile, "utf8").trim();
+    fs.unlinkSync(tmpIdFile);
   } catch {}
-  // Update or create message
+
   if (savedId) {
     try {
       await webhook.editMessage(savedId, { embeds: [embed] });
       console.log(`✅ Edited leaderboard message ${savedId}`);
       return;
     } catch (err) {
-      if (err.code !== 10008) {
-        throw err;
-      }
-      // else: message not found, fall through to create
+      if (err.code !== 10008) throw err;
     }
   }
   const sent = await webhook.send({ embeds: [embed] });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
-  // Optionally upload new id via ftp
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
   console.log(`✅ Posted new leaderboard message ${sent.id}`);
 }
