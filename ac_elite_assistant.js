@@ -86,29 +86,27 @@ const client = new Client({
 
 // Score calculation
 function calculateScore(d) {
-  const money = d.points ?? 0;
-  const wins = d.wins ?? 0;
-  const podiums = d.podiums ?? 0;
-  const poles = d.poles ?? 0;
-  const fastestLaps = d.flaps ?? 0;
-  const kilometers = d.kilometers ?? 0;
-  const infractions = d.infr ?? 0;
-  const crashes = d.crashes ?? 0;
-  const infrPer100km = d.infr_per_100km ?? 0;
-  const crashesPer100km = d.cr_per_100km ?? 0;
+  const km = Math.max(1, d.kilometers ?? 0); // Prevent division by zero
+  const winRate = (d.wins ?? 0) / (km / 1000);
+  const podiumRate = (d.podiums ?? 0) / (km / 1000);
+  const poleRate = (d.poles ?? 0) / (km / 1000);
+  const flapRate = (d.flaps ?? 0) / (km / 1000);
+  const enduranceBonus = Math.log10(km); // Small reward for distance
+
   return (
-    money * 0.5 +
-    wins * 10 +
-    podiums * 8 +
-    poles * 15 +
-    fastestLaps * 12 +
-    kilometers * 0.2 -
-    infractions * 2 -
-    crashes * 3 -
-    infrPer100km * 20 -
-    crashesPer100km * 25
+    winRate * 30 +
+    podiumRate * 20 +
+    poleRate * 15 +
+    flapRate * 12 +
+    enduranceBonus * 10 +
+    (d.points ?? 0) * 0.05 - // Money is worth much less now
+    (d.infr ?? 0) * 1.5 -
+    (d.crashes ?? 0) * 2.0 -
+    (d.infr_per_100km ?? 0) * 25 -
+    (d.cr_per_100km ?? 0) * 30
   );
 }
+
 function getLicence(d) {
   const score = calculateScore(d);
   return LICENCES.find((l) => score >= l.min) || null;
