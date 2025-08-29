@@ -44,10 +44,13 @@ const LINKED_USERS_FILE = "linked_users.json";
 const REMOTE_RANK_FILE = "kissmyrank/rank.json";
 const REMOTE_LEADERBOARD_FILE = "kissmyrank/leaderboard.json";
 
-// -- LOKAAL (tijdelijke lees/schrijf paden) --
-const LOCAL_RANK_FILE = path.join(__dirname, "rank.json");
+// -- LOKAAL (altijd alleen de bestandsnaam, met basename voor future-proof) --
+const LOCAL_RANK_FILE = path.join(__dirname, path.basename(REMOTE_RANK_FILE));
 const SETTINGS_FILE = "leaderboard_settings.json";
-const LOCAL_LEADERBOARD_FILE = path.join(__dirname, "leaderboard.json");
+const LOCAL_LEADERBOARD_FILE = path.join(
+  __dirname,
+  path.basename(REMOTE_LEADERBOARD_FILE)
+);
 
 // Bericht-ID bestand blijft in de root van de FTP zoals voorheen
 const MESSAGE_ID_FILE = "discord_message_id.txt";
@@ -109,7 +112,7 @@ function calculateScore(d) {
     poleRate * 15 +
     flapRate * 12 +
     enduranceBonus * 10 +
-    (d.points ?? 0) * 0.05 - // Money is worth much less now
+    (d.points ?? 0) * 0.05 -
     (d.infr ?? 0) * 1.5 -
     (d.crashes ?? 0) * 2.0 -
     (d.infr_per_100km ?? 0) * 25 -
@@ -200,9 +203,11 @@ client.on("messageCreate", async (m) => {
   const match = m.content.match(/(7656119\d{10,12})/);
   if (!match) return m.reply("Invalid Steam64 ID.");
   const guid = match[1];
+
   let linked = {};
   if (fs.existsSync(LINKED_USERS_FILE))
     linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE));
+
   if (linked[guid]) {
     // Steam ID is already linked
     if (linked[guid] === m.author.id) {
@@ -216,6 +221,7 @@ client.on("messageCreate", async (m) => {
     }
     return;
   }
+
   // Steam ID nog niet gelinkt, nu koppelen
   linked[guid] = m.author.id;
   fs.writeFileSync(LINKED_USERS_FILE, JSON.stringify(linked, null, 2));
@@ -429,7 +435,12 @@ async function assignAllLicences(guild) {
     return;
   }
   if (!fs.existsSync(LOCAL_RANK_FILE)) return;
-  const linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE));
+
+  let linked = {};
+  if (fs.existsSync(LINKED_USERS_FILE)) {
+    linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE));
+  }
+
   const data = JSON.parse(fs.readFileSync(LOCAL_RANK_FILE));
   for (const [guid, did] of Object.entries(linked)) {
     const driver = data.find((d) => d.guid === guid);
@@ -476,12 +487,11 @@ async function assignAllLicences(guild) {
 
 // Leaderboard post (met auto-swap detect)
 async function postLeaderboard(track, car, imageUrl) {
-  // Download en inlezen
+  // Download en inlezen (REMOTE → LOCAL)
   await ftpDownload(REMOTE_LEADERBOARD_FILE, LOCAL_LEADERBOARD_FILE);
   const data = JSON.parse(fs.readFileSync(LOCAL_LEADERBOARD_FILE));
 
-  // Detect swapped settings.json: als data[track] niet bestaat maar data[car][track] wél,
-  // dan hebben we track en car omgedraaid in de JSON
+  // Detect swapped settings.json
   if (!data[track] && data[car] && data[car][track]) {
     console.warn(
       `[Leaderboard] Detected swapped track/car in settings. Swapping automatically.`
@@ -523,7 +533,7 @@ async function postLeaderboard(track, car, imageUrl) {
   let id = null;
   try {
     const tmp = path.join(__dirname, "__mid.tmp");
-    await ftpDownload(MESSAGE_ID_FILE, tmp);
+    await ftpDownload(MESSAGE_ID_FILE, tmp); // uit FTP-root
     id = fs.readFileSync(tmp, "utf8").trim();
     fs.unlinkSync(tmp);
   } catch {}
