@@ -37,10 +37,10 @@ const MOD_ROLE_IDS = [
 // FTP & file settings
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
 const LINKED_USERS_FILE = "linked_users.json";
-const LICENCE_FILE = "rank.json";
+const LICENCE_FILE = "kissmyrank/rank.json";
 const LOCAL_LICENCE_FILE = path.join(__dirname, LICENCE_FILE);
 const SETTINGS_FILE = "leaderboard_settings.json";
-const LEADERBOARD_FILE = "leaderboard.json";
+const LEADERBOARD_FILE = "kissmyrank/leaderboard.json";
 const MESSAGE_ID_FILE = "discord_message_id.txt";
 const DEFAULT_LEADERBOARD_IMAGE =
   "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png";
