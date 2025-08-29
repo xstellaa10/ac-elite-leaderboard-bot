@@ -36,12 +36,22 @@ const MOD_ROLE_IDS = [
 
 // FTP & file settings
 const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
+
+// Lokale/remote bestandsnamen
 const LINKED_USERS_FILE = "linked_users.json";
-const LICENCE_FILE = "kissmyrank/rank.json";
-const LOCAL_LICENCE_FILE = path.join(__dirname, LICENCE_FILE);
+
+// -- REMOTE (op de FTP) --
+const REMOTE_RANK_FILE = "kissmyrank/rank.json";
+const REMOTE_LEADERBOARD_FILE = "kissmyrank/leaderboard.json";
+
+// -- LOKAAL (tijdelijke lees/schrijf paden) --
+const LOCAL_RANK_FILE = path.join(__dirname, "rank.json");
 const SETTINGS_FILE = "leaderboard_settings.json";
-const LEADERBOARD_FILE = "kissmyrank/leaderboard.json";
+const LOCAL_LEADERBOARD_FILE = path.join(__dirname, "leaderboard.json");
+
+// Bericht-ID bestand blijft in de root van de FTP zoals voorheen
 const MESSAGE_ID_FILE = "discord_message_id.txt";
+
 const DEFAULT_LEADERBOARD_IMAGE =
   "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png";
 
@@ -364,12 +374,12 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
 // Assign a single member with breakdown
 async function assignLicenceToMember(guild, guid, did) {
   try {
-    await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
+    await ftpDownload(REMOTE_RANK_FILE, LOCAL_RANK_FILE);
   } catch {
     return;
   }
-  if (!fs.existsSync(LOCAL_LICENCE_FILE)) return;
-  const data = JSON.parse(fs.readFileSync(LOCAL_LICENCE_FILE));
+  if (!fs.existsSync(LOCAL_RANK_FILE)) return;
+  const data = JSON.parse(fs.readFileSync(LOCAL_RANK_FILE));
   const driver = data.find((d) => d.guid === guid);
   if (!driver) return;
   const lic = getLicence(driver);
@@ -414,13 +424,13 @@ async function assignLicenceToMember(guild, guid, did) {
 // Assign all linked
 async function assignAllLicences(guild) {
   try {
-    await ftpDownload(LICENCE_FILE, LOCAL_LICENCE_FILE);
+    await ftpDownload(REMOTE_RANK_FILE, LOCAL_RANK_FILE);
   } catch {
     return;
   }
-  if (!fs.existsSync(LOCAL_LICENCE_FILE)) return;
+  if (!fs.existsSync(LOCAL_RANK_FILE)) return;
   const linked = JSON.parse(fs.readFileSync(LINKED_USERS_FILE));
-  const data = JSON.parse(fs.readFileSync(LOCAL_LICENCE_FILE));
+  const data = JSON.parse(fs.readFileSync(LOCAL_RANK_FILE));
   for (const [guid, did] of Object.entries(linked)) {
     const driver = data.find((d) => d.guid === guid);
     if (!driver) continue;
@@ -467,10 +477,8 @@ async function assignAllLicences(guild) {
 // Leaderboard post (met auto-swap detect)
 async function postLeaderboard(track, car, imageUrl) {
   // Download en inlezen
-  await ftpDownload(LEADERBOARD_FILE, path.join(__dirname, LEADERBOARD_FILE));
-  const data = JSON.parse(
-    fs.readFileSync(path.join(__dirname, LEADERBOARD_FILE))
-  );
+  await ftpDownload(REMOTE_LEADERBOARD_FILE, LOCAL_LEADERBOARD_FILE);
+  const data = JSON.parse(fs.readFileSync(LOCAL_LEADERBOARD_FILE));
 
   // Detect swapped settings.json: als data[track] niet bestaat maar data[car][track] wél,
   // dan hebben we track en car omgedraaid in de JSON
