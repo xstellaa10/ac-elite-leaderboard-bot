@@ -35,7 +35,17 @@ const MOD_ROLE_IDS = [
 ];
 
 // FTP & file settings
-const { FTP_HOST = "", FTP_USER = "", FTP_PASS = "" } = process.env;
+const {
+  FTP_HOST = "",
+  FTP_USER = "",
+  FTP_PASS = "",
+  DISABLE_RANKS = "false",
+} = process.env;
+
+// Helper: zijn ranks tijdelijk uitgeschakeld?
+function ranksDisabled() {
+  return String(DISABLE_RANKS).toLowerCase() === "true";
+}
 
 // Lokale/remote bestandsnamen
 const LINKED_USERS_FILE = "linked_users.json";
@@ -155,8 +165,16 @@ client.once("ready", async () => {
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(`🚀 Auto run started at ${new Date().toLocaleString()}`);
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
-    await assignAllLicences(guild);
-    await log.send("✅ Auto-assignment of licences completed");
+
+    if (ranksDisabled()) {
+      await log.send(
+        "⏸️ Auto-licence assignment skipped."
+      );
+    } else {
+      await assignAllLicences(guild);
+      await log.send("✅ Auto-assignment of licences completed");
+    }
+
     const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE));
     await postLeaderboard(
       settings.track,
@@ -319,6 +337,16 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
 
   // !assignlicences
   if (msg.content.startsWith("!assignlicences")) {
+    if (ranksDisabled()) {
+      const r = await msg.reply(
+        "⏸️ Ranks are temporary disabled."
+      );
+      setTimeout(() => {
+        r.delete().catch();
+        msg.delete().catch();
+      }, 8000);
+      return;
+    }
     const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
     await log.send(
       `🛠️ Manual assignLicences at ${new Date().toLocaleString()}`
@@ -379,6 +407,19 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
 
 // Assign a single member with breakdown
 async function assignLicenceToMember(guild, guid, did) {
+  if (ranksDisabled()) {
+    // Log netjes dat we hebben geskipped
+    try {
+      const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
+      const user = await guild.members.fetch(did).catch(() => null);
+      await log.send(
+        `⏸️ Skipped assigning licence for ${
+          user ? user.user.tag : did
+        } (Steam64 ${guid}) because ranks are temporary disabled.`
+      );
+    } catch {}
+    return;
+  }
   try {
     await ftpDownload(REMOTE_RANK_FILE, LOCAL_RANK_FILE);
   } catch {
@@ -429,6 +470,7 @@ async function assignLicenceToMember(guild, guid, did) {
 
 // Assign all linked
 async function assignAllLicences(guild) {
+  if (ranksDisabled()) return;
   try {
     await ftpDownload(REMOTE_RANK_FILE, LOCAL_RANK_FILE);
   } catch {
