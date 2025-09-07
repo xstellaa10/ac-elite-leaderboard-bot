@@ -513,7 +513,7 @@ async function assignAllLicences(guild) {
 }
 
 // Leaderboard post (met auto-swap detect)
-async function postLeaderboard(track, car, imageUrl) {
+async function postLeaderboard(track, car) {
   // Download en inlezen (REMOTE → LOCAL)
   await ftpDownload(REMOTE_LEADERBOARD_FILE, LOCAL_LEADERBOARD_FILE);
   const data = JSON.parse(fs.readFileSync(LOCAL_LEADERBOARD_FILE));
