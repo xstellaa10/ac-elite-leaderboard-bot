@@ -554,16 +554,16 @@ async function postLeaderboard(track, car, imageUrl) {
   const embed = new EmbedBuilder()
     .setAuthor({
       name: "🏆 KMR Leaderboard",
-      iconURL: client.user.displayAvatarURL(),
+      iconURL: DEFAULT_LEADERBOARD_IMAGE,
       url: "https://acstuff.ru/",
     })
     .setTitle("AC Elite Server")
     .setDescription(desc)
     .setColor(0x6495ed)
-    .setThumbnail(client.user.displayAvatarURL())
+    .setThumbnail(DEFAULT_LEADERBOARD_IMAGE)
     .setFooter({
       text: "Data by AC Elite Assistant",
-      iconURL: client.user.displayAvatarURL(),
+      iconURL: DEFAULT_LEADERBOARD_IMAGE,
     })
     .setTimestamp();
 
@@ -583,11 +583,7 @@ async function postLeaderboard(track, car, imageUrl) {
       if (err.code !== 10008) throw err;
     }
   }
-  const sent = await webhook.send({
-    username: client.user.username,
-    avatarURL: client.user.displayAvatarURL(),
-    embeds: [embed],
-  });
+  const sent = await webhook.send({ embeds: [embed] });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
 }
