@@ -167,9 +167,7 @@ client.once("ready", async () => {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
 
     if (ranksDisabled()) {
-      await log.send(
-        "⏸️ Auto-licence assignment skipped."
-      );
+      await log.send("⏸️ Auto-licence assignment skipped.");
     } else {
       await assignAllLicences(guild);
       await log.send("✅ Auto-assignment of licences completed");
@@ -338,9 +336,7 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
   // !assignlicences
   if (msg.content.startsWith("!assignlicences")) {
     if (ranksDisabled()) {
-      const r = await msg.reply(
-        "⏸️ Ranks are temporary disabled."
-      );
+      const r = await msg.reply("⏸️ Ranks are temporary disabled.");
       setTimeout(() => {
         r.delete().catch();
         msg.delete().catch();
@@ -563,7 +559,7 @@ async function postLeaderboard(track, car, imageUrl) {
     })
     .setTitle("AC Elite Server")
     .setDescription(desc)
-    .setColor(0xff0000)
+    .setColor(0x6495ed)
     .setThumbnail(DEFAULT_LEADERBOARD_IMAGE)
     .setFooter({
       text: "Data by AC Elite Assistant",
