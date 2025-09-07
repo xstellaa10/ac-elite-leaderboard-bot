@@ -554,16 +554,16 @@ async function postLeaderboard(track, car, imageUrl) {
   const embed = new EmbedBuilder()
     .setAuthor({
       name: "🏆 KMR Leaderboard",
-      iconURL: DEFAULT_LEADERBOARD_IMAGE,
+      iconURL: client.user.displayAvatarURL(),
       url: "https://acstuff.ru/",
     })
     .setTitle("AC Elite Server")
     .setDescription(desc)
     .setColor(0x6495ed)
-    .setThumbnail(DEFAULT_LEADERBOARD_IMAGE)
+    .setThumbnail(client.user.displayAvatarURL())
     .setFooter({
       text: "Data by AC Elite Assistant",
-      iconURL: DEFAULT_LEADERBOARD_IMAGE,
+      iconURL: client.user.displayAvatarURL(),
     })
     .setTimestamp();
 
