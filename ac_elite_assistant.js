@@ -583,7 +583,11 @@ async function postLeaderboard(track, car, imageUrl) {
       if (err.code !== 10008) throw err;
     }
   }
-  const sent = await webhook.send({ embeds: [embed] });
+  const sent = await webhook.send({
+    username: client.user.username,
+    avatarURL: client.user.displayAvatarURL(),
+    embeds: [embed],
+  });
   fs.writeFileSync(path.join(__dirname, MESSAGE_ID_FILE), sent.id);
   await ftpUpload(path.join(__dirname, MESSAGE_ID_FILE), MESSAGE_ID_FILE);
 }
