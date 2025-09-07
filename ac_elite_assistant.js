@@ -65,6 +65,9 @@ const LOCAL_LEADERBOARD_FILE = path.join(
 // Bericht-ID bestand blijft in de root van de FTP zoals voorheen
 const MESSAGE_ID_FILE = "discord_message_id.txt";
 
+/* ===== Default car when settings are missing (kept if only track changes) === */
+const DEFAULT_CAR = "tatuusfa01";
+
 /* ===================== END CONFIGURATION ===================== */
 
 // FTP utility functions
@@ -259,8 +262,10 @@ client.on("messageCreate", async (msg) => {
 
 Here are all the moderator commands you can use in #🛠️・mod-tools:
 
-\`!changetrack [track] <car>\`
-— Change the track and car for the leaderboard. Example: \`!changetrack spa ferrari488\`. (If you only provide the car, it defaults the track to "tatuusfa1".)
+\`!changetrack <track> [car]\`
+— Change the track for the leaderboard, and optionally the car.
+   - **One argument:** sets the **track only**; the **car stays as previously set** (defaults to \`${DEFAULT_CAR}\` if not set yet).
+   - **Two arguments:** sets both **track** and **car**.
 - **Tip:** You can find the correct full track names on the KMR Panel → Tracks: http://157.90.3.32:5283/tracks  
   Click on a track, then copy the track name from the end of the URL.  
   For example, if the URL is \`http://157.90.3.32:5283/track/ks_nurburgring_layout_gp_a\`, you should use \`ks_nurburgring_layout_gp_a\` as the track name in the command.
@@ -299,24 +304,39 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
     return;
   }
 
-  // !changetrack [track] <car>
+  // changetrack <track> [car]
   if (msg.content.startsWith("!changetrack")) {
-    const args = msg.content.split(/ +/).slice(1);
-    let track, car;
-    if (args.length === 1) {
-      track = "tatuusfa1";
-      car = args[0];
-    } else if (args.length >= 2) {
-      track = args[0];
-      car = args[1];
-    } else {
-      const r = await msg.reply("Usage: !changetrack [track] <car>");
+    const args = msg.content.trim().split(/\s+/).slice(1);
+
+    if (args.length < 1) {
+      const r = await msg.reply("Usage: !changetrack <track> [car]");
       setTimeout(() => {
         r.delete().catch();
         msg.delete().catch();
       }, 8000);
       return;
     }
+
+    // Load current settings to preserve car if only track is provided
+    let current = { track: "", car: DEFAULT_CAR };
+    try {
+      if (fs.existsSync(SETTINGS_FILE)) {
+        current = { ...current, ...JSON.parse(fs.readFileSync(SETTINGS_FILE)) };
+      }
+    } catch {}
+
+    let track = current.track || args[0]; // fallback if first-time use
+    let car = current.car || DEFAULT_CAR;
+
+    if (args.length === 1) {
+      // One arg => change TRACK only
+      track = args[0];
+    } else {
+      // Two or more args => take first two as track & car
+      track = args[0];
+      car = args[1];
+    }
+
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ track, car }, null, 2));
     const r = await msg.reply(`Settings updated: ${track}/${car}`);
     setTimeout(() => {
