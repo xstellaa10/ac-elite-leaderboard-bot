@@ -548,7 +548,7 @@ async function postLeaderboard(track, car, imageUrl) {
     })
     .setTitle("AC Elite Server")
     .setDescription(desc)
-    .setColor(0x6495ed)
+    .setColor(0x0462e3)
     .setThumbnail(client.user.displayAvatarURL())
     .setFooter({
       text: "Data by AC Elite Assistant",
