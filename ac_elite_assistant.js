@@ -66,7 +66,7 @@ const LOCAL_LEADERBOARD_FILE = path.join(
 const MESSAGE_ID_FILE = "discord_message_id.txt";
 
 const DEFAULT_LEADERBOARD_IMAGE =
-  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite.png";
+  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite-rebrand.png";
 
 /* ===================== END CONFIGURATION ===================== */
 
