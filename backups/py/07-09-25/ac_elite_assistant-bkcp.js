@@ -65,6 +65,9 @@ const LOCAL_LEADERBOARD_FILE = path.join(
 // Bericht-ID bestand blijft in de root van de FTP zoals voorheen
 const MESSAGE_ID_FILE = "discord_message_id.txt";
 
+// const DEFAULT_LEADERBOARD_IMAGE =
+//   "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite-rebrand.png";
+
 /* ===================== END CONFIGURATION ===================== */
 
 // FTP utility functions
@@ -171,7 +174,11 @@ client.once("ready", async () => {
     }
 
     const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE));
-    await postLeaderboard(settings.track, settings.car);
+    await postLeaderboard(
+      settings.track,
+      settings.car,
+      // DEFAULT_LEADERBOARD_IMAGE
+    );
     await log.send(
       `✅ Auto leaderboard updated for ${settings.track}/${settings.car}`
     );
@@ -369,7 +376,11 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
       return;
     }
     try {
-      await postLeaderboard(settings.track, settings.car);
+      await postLeaderboard(
+        settings.track,
+        settings.car,
+        // DEFAULT_LEADERBOARD_IMAGE
+      );
       await log.send(
         `✅ Manual leaderboard updated for ${settings.track}/${settings.car}`
       );
