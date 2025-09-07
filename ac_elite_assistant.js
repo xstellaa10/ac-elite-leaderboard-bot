@@ -66,7 +66,7 @@ const LOCAL_LEADERBOARD_FILE = path.join(
 const MESSAGE_ID_FILE = "discord_message_id.txt";
 
 /* ===== Default car when settings are missing (kept if only track changes) === */
-const DEFAULT_CAR = "tatuusfa01";
+const DEFAULT_CAR = "tatuusfa1";
 
 /* ===================== END CONFIGURATION ===================== */
 
