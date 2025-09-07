@@ -65,8 +65,8 @@ const LOCAL_LEADERBOARD_FILE = path.join(
 // Bericht-ID bestand blijft in de root van de FTP zoals voorheen
 const MESSAGE_ID_FILE = "discord_message_id.txt";
 
-const DEFAULT_LEADERBOARD_IMAGE =
-  "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite-rebrand.png";
+// const DEFAULT_LEADERBOARD_IMAGE =
+//   "https://raw.githubusercontent.com/xstellaa10/ac-elite-leaderboard-bot/master/images/acelite-rebrand.png";
 
 /* ===================== END CONFIGURATION ===================== */
 
@@ -177,7 +177,7 @@ client.once("ready", async () => {
     await postLeaderboard(
       settings.track,
       settings.car,
-      DEFAULT_LEADERBOARD_IMAGE
+      // DEFAULT_LEADERBOARD_IMAGE
     );
     await log.send(
       `✅ Auto leaderboard updated for ${settings.track}/${settings.car}`
@@ -379,7 +379,7 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
       await postLeaderboard(
         settings.track,
         settings.car,
-        DEFAULT_LEADERBOARD_IMAGE
+        // DEFAULT_LEADERBOARD_IMAGE
       );
       await log.send(
         `✅ Manual leaderboard updated for ${settings.track}/${settings.car}`
