@@ -34,9 +34,6 @@ const MOD_ROLE_IDS = [
   "950564342015873034", // Moderator
 ];
 
-// NEW: where the “all tracks” leaderboard lives
-const ALL_TRACKS_CHANNEL_ID = "1418782521121964032"; // #🏁・all-leaderboards (your provided id)
-
 // FTP & file settings
 const {
   FTP_HOST = "",
@@ -67,9 +64,6 @@ const LOCAL_LEADERBOARD_FILE = path.join(
 
 // Bericht-ID bestand blijft in de root van de FTP zoals voorheen
 const MESSAGE_ID_FILE = "discord_message_id.txt";
-
-// NEW: per-track message id map for all-tracks channel
-const ALL_TRACKS_MESSAGE_IDS_FILE = "all_tracks_message_ids.json";
 
 /* ===== Default car when settings are missing (kept if only track changes) === */
 const DEFAULT_CAR = "tatuusfa1";
@@ -141,134 +135,6 @@ function getLicence(d) {
   return LICENCES.find((l) => score >= l.min) || null;
 }
 
-/* ===================== UTILS: All-Tracks message ids ===================== */
-function loadAllTracksMessageMap() {
-  try {
-    if (fs.existsSync(ALL_TRACKS_MESSAGE_IDS_FILE)) {
-      return JSON.parse(fs.readFileSync(ALL_TRACKS_MESSAGE_IDS_FILE, "utf8"));
-    }
-  } catch {}
-  return {}; // { [trackName]: messageId }
-}
-
-function saveAllTracksMessageMap(map) {
-  fs.writeFileSync(
-    ALL_TRACKS_MESSAGE_IDS_FILE,
-    JSON.stringify(map, null, 2),
-    "utf8"
-  );
-}
-
-/* ===================== UTILS: formatting ===================== */
-function formatTopList(entries) {
-  const medals = { 1: "🥇", 2: "🥈", 3: "🥉" };
-  let out = "";
-  entries.slice(0, 10).forEach((e, i) => {
-    const place = i + 1;
-    const m = medals[place] || "";
-    const ms = e.laptime || 0;
-    const min = Math.floor(ms / 60000);
-    const sec = ((ms / 1000) % 60).toFixed(3).padStart(6, "0");
-    out += `${place}. \`${min}:${sec}\` — **${
-      e.name?.slice(0, 30) || "Unknown"
-    }** ${m}\n`;
-  });
-  return out || "_No laps recorded yet._";
-}
-
-/* ===================== All-Tracks Leaderboard ===================== */
-/**
- * Posts/edits one embed per track (top 10) for the given car in ALL_TRACKS_CHANNEL_ID.
- * Remembers message ids locally and mirrors the id map to FTP.
- */
-async function postAllTracksLeaderboards(currentCar) {
-  // Ensure we have the latest message-id map from FTP if available
-  try {
-    await ftpDownload(
-      ALL_TRACKS_MESSAGE_IDS_FILE,
-      path.join(__dirname, ALL_TRACKS_MESSAGE_IDS_FILE)
-    );
-  } catch {
-    // ok to miss on first run
-  }
-
-  // 1) Download & read leaderboard data
-  await ftpDownload(REMOTE_LEADERBOARD_FILE, LOCAL_LEADERBOARD_FILE);
-  const data = JSON.parse(fs.readFileSync(LOCAL_LEADERBOARD_FILE));
-
-  // 2) Open the destination channel
-  const ch = await client.channels.fetch(ALL_TRACKS_CHANNEL_ID);
-
-  // 3) Load map of track -> messageId
-  const idMap = loadAllTracksMessageMap();
-
-  // 4) For each track that has the current car, post or edit an embed
-  const tracks = Object.keys(data).sort((a, b) => a.localeCompare(b));
-  for (const track of tracks) {
-    const carsObj = data[track] || {};
-    const arr = (carsObj[currentCar] || [])
-      .slice()
-      .sort((a, b) => a.laptime - b.laptime);
-
-    // Skip tracks that have no times for this car
-    if (!arr.length) continue;
-
-    const desc = `**Track:** \`${track}\`\n**Car:** \`${currentCar}\`\n\n**Top 10:**\n${formatTopList(
-      arr
-    )}`;
-
-    const embed = new EmbedBuilder()
-      .setAuthor({
-        name: "🏆 KMR Leaderboard — All Tracks",
-        iconURL: client.user.displayAvatarURL(),
-      })
-      .setTitle(track)
-      .setDescription(desc)
-      .setColor(0xd39f01)
-      .setFooter({
-        text: "Data by AC Elite Assistant",
-        iconURL: client.user.displayAvatarURL(),
-      })
-      .setTimestamp();
-
-    const existingId = idMap[track];
-    try {
-      if (existingId) {
-        // Try to edit the existing message
-        const msg = await ch.messages.fetch(existingId).catch(() => null);
-        if (msg) {
-          await msg.edit({ embeds: [embed] });
-          continue;
-        }
-      }
-      // No message or failed fetch -> send a new one and record the id
-      const sent = await ch.send({ embeds: [embed] });
-      idMap[track] = sent.id;
-    } catch (err) {
-      console.error(
-        `[AllTracks] Failed to post/edit for track "${track}":`,
-        err
-      );
-    }
-  }
-
-  // 5) Persist message-id map locally and mirror to FTP (optional but consistent with your pattern)
-  saveAllTracksMessageMap(idMap);
-  try {
-    await ftpUpload(
-      path.join(__dirname, ALL_TRACKS_MESSAGE_IDS_FILE),
-      ALL_TRACKS_MESSAGE_IDS_FILE
-    );
-  } catch (err) {
-    console.warn(
-      "[AllTracks] Could not upload message id map to FTP:",
-      err.message
-    );
-  }
-}
-
-/* ===================== CORE BOT ===================== */
-
 // On ready: placement & auto-run
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -312,11 +178,6 @@ client.once("ready", async () => {
     await log.send(
       `✅ Auto leaderboard updated for ${settings.track}/${settings.car}`
     );
-
-    // NEW: post/update the full “all tracks” board for the current car
-    await postAllTracksLeaderboards(settings.car);
-    await log.send(`✅ All-tracks leaderboard updated for car ${settings.car}`);
-
     process.exit(0);
   }
 });
@@ -414,9 +275,6 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
 
 \`!updateleaderboard\`
 — Post or update the leaderboard embed based on the current settings.
-
-\`!updateallleaderboards\`
-— Post or update **one message per track** with the top 10 for the **current car** in the all-tracks channel.
 
 \`!achelp\`
 — Get this list of commands sent to your DM!
@@ -536,46 +394,6 @@ Here are all the moderator commands you can use in #🛠️・mod-tools:
         `✅ Manual leaderboard updated for ${settings.track}/${settings.car}`
       );
       const r = await msg.reply("Leaderboard updated!");
-      setTimeout(() => {
-        r.delete().catch();
-        msg.delete().catch();
-      }, 8000);
-    } catch (err) {
-      console.error(err);
-      const r = await msg.reply("Error: " + err.message);
-      setTimeout(() => {
-        r.delete().catch();
-        msg.delete().catch();
-      }, 8000);
-    }
-    return;
-  }
-
-  // NEW: !updateallleaderboards
-  if (msg.content.startsWith("!updateallleaderboards")) {
-    let settings;
-    try {
-      settings = JSON.parse(fs.readFileSync(SETTINGS_FILE));
-    } catch {
-      const r = await msg.reply(
-        "No settings. Use !changetrack first (car is required)."
-      );
-      setTimeout(() => {
-        r.delete().catch();
-        msg.delete().catch();
-      }, 8000);
-      return;
-    }
-    const log = await client.channels.fetch(MOD_TOOLS_LOGS_CHANNEL_ID);
-    await log.send(
-      `🛠️ Manual all-tracks update at ${new Date().toLocaleString()}`
-    );
-    try {
-      await postAllTracksLeaderboards(settings.car);
-      await log.send(
-        `✅ Manual all-tracks leaderboard updated for car ${settings.car}`
-      );
-      const r = await msg.reply("All-tracks leaderboard updated!");
       setTimeout(() => {
         r.delete().catch();
         msg.delete().catch();
