@@ -221,10 +221,12 @@ async function postAllTracksLeaderboards(currentCar) {
       .setAuthor({
         name: "🏆 KMR Leaderboard — All Tracks",
         iconURL: client.user.displayAvatarURL(),
+        url: "https://acstuff.ru/", // ✅ add this
       })
       .setTitle(track)
       .setDescription(desc)
       .setColor(0xd39f01)
+      .setThumbnail(client.user.displayAvatarURL()) // ✅ add this if you also want the bot avatar shown on the right
       .setFooter({
         text: "Data by AC Elite Assistant",
         iconURL: client.user.displayAvatarURL(),
