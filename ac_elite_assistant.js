@@ -221,7 +221,7 @@ async function postAllTracksLeaderboards(currentCar) {
       .setAuthor({
         name: "🏆 KMR Leaderboard — All Tracks",
         iconURL: client.user.displayAvatarURL(),
-        url: "https://acstuff.ru/", // ✅ add this
+        url: `http://157.90.3.32:5283/track/${track}/${currentCar}`,
       })
       .setTitle(track)
       .setDescription(desc)
@@ -748,7 +748,7 @@ async function postLeaderboard(track, car) {
     .setAuthor({
       name: "🏆 KMR Leaderboard",
       iconURL: client.user.displayAvatarURL(),
-      url: "https://acstuff.ru/",
+      url: `http://157.90.3.32:5283/track/${track}/${car}`,
     })
     .setTitle("AC Elite Server")
     .setDescription(desc)
